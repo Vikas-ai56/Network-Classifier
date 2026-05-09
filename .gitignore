@@ -1,0 +1,7 @@
+__pycache__/
+output/
+run_*.py
+*.ipynbdataset/
+model/
+__pycache__/
+.DS_Store
