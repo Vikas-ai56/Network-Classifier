@@ -1,5 +1,12 @@
 # Next-Generation Encrypted Network Traffic Classifier
 
+## 📘 Full Codebase Documentation
+
+For end-to-end repository architecture, entrypoints, folder responsibilities, flow mapping, and architecture change guidance, see:
+
+- [docs/README.md](docs/README.md)
+- [docs/ARCHITECTURE_CHANGE_CHECKLIST.md](docs/ARCHITECTURE_CHANGE_CHECKLIST.md)
+
 Welcome to the core repository for our Hackathon Project! This repository contains a state-of-the-art deep learning architecture designed to classify encrypted network traffic in real-time. It focuses specifically on **Zero-Day Generalization**—the ability to accurately identify traffic types the model has never been explicitly trained on.
 
 ---
