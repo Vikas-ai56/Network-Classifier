@@ -7,16 +7,16 @@ This document explains the repository architecture, entrypoints, logic flow, fol
 This repository currently contains **two related pipelines**:
 
 1. **Dual-Branch SupCon + ProtoNet pipeline** (main hackathon workflow)
-   - Entrypoint: `/tmp/workspace/dhruvgit77/Netwok-Classifier/main.py`
+   - Entrypoint: `main.py`
    - Uses sequence + stats encoder from `src/models_dual_branch.py`
    - Uses JSON sequence dataset loader from `src/dataset_netmamba.py`
    - Uses contrastive/prototypical training logic from `src/train_supcon.py`
 
 2. **Image-style NetMamba pretrain/finetune pipeline** (upstream-style training code)
    - Entrypoints:
-     - `/tmp/workspace/dhruvgit77/Netwok-Classifier/src/pre-train.py`
-     - `/tmp/workspace/dhruvgit77/Netwok-Classifier/src/fine-tune.py`
-     - `/tmp/workspace/dhruvgit77/Netwok-Classifier/src/eval.py`
+     - `src/pre-train.py`
+     - `src/fine-tune.py`
+     - `src/eval.py`
    - Uses model architecture in `src/models_net_mamba.py` and low-level blocks in `src/models_mamba.py`
    - Uses epoch loops in `src/engine.py`
 
