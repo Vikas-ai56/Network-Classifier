@@ -1,4 +1,4 @@
-# Netwok-Classifier: End-to-End Codebase Documentation
+# Network Traffic Classifier: End-to-End Codebase Documentation
 
 This document explains the repository architecture, entrypoints, logic flow, folder responsibilities, and where to modify the system for future work.
 
@@ -250,4 +250,3 @@ Edit:
 - The root README describes the intended dual-branch workflow; the repository also includes a broader NetMamba training stack.
 - Some scripts assume specific absolute dataset roots (especially under `dataset/`), so path cleanup is typically a first refactor for portability.
 - The project currently has multiple training paths; keep one path as your target and avoid mixing assumptions between them.
-
