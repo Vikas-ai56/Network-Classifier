@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 from timm.models.layers import DropPath
-from models_mamba import create_block, RMSNorm, rms_norm_fn, StrideEmbed
+try:
+    from src.models_mamba import create_block, RMSNorm, rms_norm_fn, StrideEmbed
+except ImportError:
+    from models_mamba import create_block, RMSNorm, rms_norm_fn, StrideEmbed
 from timm.models.layers import trunc_normal_, lecun_normal_
 import math
 from functools import partial

@@ -11,7 +11,6 @@ try:
 except ImportError:
     RMSNorm, layer_norm_fn, rms_norm_fn = None, None, None
 
-PACKET_NUM = 5  # 5 packets constitutes an flow array
 
 class StrideEmbed(nn.Module):
     def __init__(self, byte_length=1600, stride_size=4, in_chans=1, embed_dim=192):
