@@ -52,9 +52,13 @@ class SequenceBranch(nn.Module):
 class StatBranch(nn.Module):
     """
     Branch B: The Stats
-    Processes static scalars (RTT, Jitter, Total Bytes, etc.)
+    Processes static scalars (RTT, Jitter, Total Bytes, Packet Rate, Bidirectional Packets,
+    Source Port Category, Protocol, Mean Packet Size).
+
+    Input: (batch, input_dim) where input_dim is typically 8 QoS features
+    Output: (batch, hidden_dim)
     """
-    def __init__(self, input_dim: int = 4, hidden_dim: int = 128):
+    def __init__(self, input_dim: int = 8, hidden_dim: int = 128):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
@@ -63,19 +67,25 @@ class StatBranch(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU()
         )
-        
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x shape: (batch, input_dim)
         return self.mlp(x)
 
 class DualBranchEncoder(nn.Module):
     """
     The "Brain": Combines Sequence and Statistical branches.
-    Outputs a context-aware embedding.
+    Outputs a context-aware embedding for network traffic classification.
+
+    Branch A (Sequence): Per-packet features (size, IAT) over 128 packets → Mamba/LSTM → d_model
+    Branch B (Stats): QoS statistics (8 features: total_bytes, packet_rate, rtt, jitter,
+                      bidirectional_packets, src_port_category, protocol, mean_pkt_size) → MLP → d_model
+    Fusion: Concatenate + Project → embed_dim (L2 normalized)
     """
     def __init__(
-        self, 
-        seq_input_dim: int = 2, 
-        stat_input_dim: int = 4, 
+        self,
+        seq_input_dim: int = 2,
+        stat_input_dim: int = 8,
         d_model: int = 128,
         embed_dim: int = 128
     ):
@@ -108,11 +118,13 @@ class DualBranchEncoder(nn.Module):
 
 if __name__ == "__main__":
     # Quick sanity check
-    model = DualBranchEncoder()
+    model = DualBranchEncoder(seq_input_dim=2, stat_input_dim=8)
     print(f"Model initialized. Using Mamba: {HAS_MAMBA}")
-    
-    dummy_seq = torch.randn(8, 128, 2)
-    dummy_stat = torch.randn(8, 4)
-    
+
+    # Test with batch of 8 samples
+    dummy_seq = torch.randn(8, 128, 2)   # 8 samples, 128 packets, 2 features (size, IAT)
+    dummy_stat = torch.randn(8, 8)       # 8 samples, 8 QoS features
+
     out = model(dummy_seq, dummy_stat)
-    print(f"Output embedding shape: {out.shape}")
+    print(f"Output embedding shape: {out.shape}")  # Should be (8, 128)
+    print(f"Embedding L2 norm (should be ~1.0): {torch.norm(out[0]).item():.4f}")
