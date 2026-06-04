@@ -212,6 +212,14 @@ def train_model(
             }, os.path.join("model", "best_model.pth"))
             print(f"    --> Saved best model (ProtoNet acc={best_acc:.4f})")
 
+        # Save checkpoint every epoch regardless of ProtoNet acc
+        torch.save({
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "loss": avg_loss,
+        }, os.path.join("model", "checkpoint_latest.pth"))
+
     # --- Final k-NN Evaluation ---
     print("\n--- Final k-NN Evaluation (k=5) ---")
     knn_acc = eval_knn(model, train_loader, val_loader, device, k=5)
