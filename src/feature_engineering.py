@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Module-level normalization constants (never mutated)
 # ---------------------------------------------------------------------------
 
-SEQ_LEN: int = 128
+SEQ_LEN: int = 30
 SEQ_INPUT_DIM: int = 3
 STAT_INPUT_DIM: int = 18
 

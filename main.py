@@ -1,3 +1,7 @@
+# ---------------------------------------------------------------------------------------------------
+# In line 51-52 I have changed the epochs and batch size suitable for a gpu (55,128) random settings
+# ---------------------------------------------------------------------------------------------------
+
 import os
 import numpy as np
 import torch
@@ -48,8 +52,8 @@ def eval_knn(model, train_loader, val_loader, device, k: int = 5) -> float:
 
 def train_model(
     data_dir: str,
-    epochs: int = 10,
-    batch_size: int = 32,
+    epochs: int = 55,
+    batch_size: int = 128,
     n_way: int = 5,
     k_shot: int = 5,
     k_query: int = 15,
@@ -63,7 +67,7 @@ def train_model(
     Parameters
     ----------
     data_dir : str
-        Path to local dataset (ISCXVPN2016 / 5G Kaggle).
+        Path to local dataset (ISCXVPN2016).
         Ignored when streaming=True.
     streaming : bool
         If True, streams CESNET-QUIC22 directly from Data Zoo batch-by-batch.

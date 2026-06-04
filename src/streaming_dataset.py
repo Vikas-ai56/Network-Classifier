@@ -69,6 +69,12 @@ def _parse_ppi(raw) -> Optional[list]:
                 return [list(parsed[i]) for i in range(3)]
         except (ValueError, SyntaxError):
             pass
+        # fallback: numpy print format "[[a b c]\n [d e f]]"
+        import re
+        rows = re.findall(r'\[([^\[\]]+)\]', raw)
+        rows = [list(map(float, re.findall(r'[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?', r))) for r in rows if r.strip()]
+        if len(rows) >= 3:
+            return rows[:3]
     return None
 
 
@@ -181,7 +187,7 @@ class CESNETStreamingDataset(IterableDataset):
     def __init__(
         self,
         data_root: str,
-        size: str = "S",
+        size: str = "M",
         chunk_size: int = 8192,
         split: str = "train",
         shuffle_chunks: bool = True,

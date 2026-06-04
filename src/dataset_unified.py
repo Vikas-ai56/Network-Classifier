@@ -786,8 +786,15 @@ class UnifiedFlowDataset(Dataset):
                 parsed = ast.literal_eval(ppi_raw)
                 if isinstance(parsed, (list, tuple)) and len(parsed) >= 3:
                     return [list(parsed[i]) for i in range(3)]
-            except (ValueError, SyntaxError) as exc:
-                logger.warning("Cannot parse PPI string at %s: %s", row_id, exc)
+            except (ValueError, SyntaxError):
+                pass
+            # fallback: numpy print format "[[a b c]\n [d e f]]"
+            import re
+            rows = re.findall(r'\[([^\[\]]+)\]', ppi_raw)
+            rows = [list(map(float, re.findall(r'[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?', r))) for r in rows if r.strip()]
+            if len(rows) >= 3:
+                return rows[:3]
+            logger.warning("Cannot parse PPI string at %s", row_id)
             return None
 
         # Pandas Series or other sequence

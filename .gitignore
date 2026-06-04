@@ -1,7 +1,12 @@
-__pycache__/
+**/__pycache__/
 output/
 run_*.py
 *.ipynbdataset/
 model/
 __pycache__/
 .DS_Store
+/scripts
+TODO
+cesnet_sample.csv
+.vscode/
+cesnet_stream_500.csv
