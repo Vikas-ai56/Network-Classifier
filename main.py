@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------------------------------
-# In line 51-52 I have changed the epochs and batch size suitable for a gpu (55,128) random settings
+# epochs=25 batch_size=128  streaming_size=XS (~2.5GB)  — first iteration on RTX 4090
 # ---------------------------------------------------------------------------------------------------
 
 import os
@@ -52,14 +52,14 @@ def eval_knn(model, train_loader, val_loader, device, k: int = 5) -> float:
 
 def train_model(
     data_dir: str,
-    epochs: int = 55,
+    epochs: int = 25,
     batch_size: int = 128,
     n_way: int = 5,
     k_shot: int = 5,
     k_query: int = 15,
     streaming: bool = False,
     streaming_data_root: str = "/workspace/.cesnet_cache",
-    streaming_size: str = "S",
+    streaming_size: str = "XS",
 ) -> None:
     """
     Train DualBranchEncoder with Margin-Based SupCon + ProtoNet eval.
@@ -75,7 +75,7 @@ def train_model(
     streaming_data_root : str
         Local directory for cesnet-datazoo metadata only (~50 MB). Used when streaming=True.
     streaming_size : str
-        "XS" (100K flows/epoch), "S" (1M), "M" (10M). Used when streaming=True.
+        "XS" (10M raw flows), "S" (25M), "M" (50M). Used when streaming=True.
     """
     if streaming:
         print(f"Streaming CESNET-QUIC22 from Data Zoo (size={streaming_size}, batch={batch_size})")
@@ -137,7 +137,7 @@ def train_model(
             project="netwok-classifier",
             config={
                 "epochs": epochs, "batch_size": batch_size, "lr": 1e-3,
-                "embed_dim": 256, "seq_len": 128, "seq_input_dim": 3,
+                "embed_dim": 256, "seq_len": 30, "seq_input_dim": 3,
                 "stat_input_dim": 18, "lambda_pos": 0.7, "lambda_neg": 0.3,
                 "loss": "MarginBasedSupCon",
             },
@@ -149,6 +149,7 @@ def train_model(
         # --- Margin-Based SupCon Training ---
         model.train()
         total_loss = 0.0
+        n_batches = 0
         for batch_idx, (seq, stat, labels) in enumerate(train_loader):
             seq, stat, labels = seq.to(device), stat.to(device), labels.to(device)
             optimizer.zero_grad()
@@ -158,14 +159,15 @@ def train_model(
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             total_loss += loss.item()
+            n_batches += 1
             if batch_idx % 10 == 0:
                 print(
                     f"Epoch [{epoch+1}/{epochs}] "
-                    f"Batch [{batch_idx}/{len(train_loader)}] "
+                    f"Batch [{batch_idx}] "
                     f"Loss: {loss.item():.4f}"
                 )
 
-        avg_loss = total_loss / len(train_loader)
+        avg_loss = total_loss / max(n_batches, 1)
 
         # --- ProtoNet Episodic Eval ---
         model.eval()
@@ -230,15 +232,15 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", default="datasets/netmamba/ISCXVPN2016/images_sampled_new")
-    parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--epochs", type=int, default=25)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--streaming", action="store_true",
                         help="Stream CESNET-QUIC22 from Data Zoo (no full download)")
     parser.add_argument("--streaming_root", default="/workspace/.cesnet_cache",
                         help="Local dir for cesnet-datazoo metadata (~50 MB)")
-    parser.add_argument("--streaming_size", default="S",
+    parser.add_argument("--streaming_size", default="XS",
                         choices=["XS", "S", "M"],
-                        help="XS=100K flows/epoch  S=1M  M=10M")
+                        help="XS=10M raw flows (~2.5GB)  S=25M (~6GB)  M=50M (~13GB)")
     args = parser.parse_args()
 
     os.makedirs("model", exist_ok=True)
