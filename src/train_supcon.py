@@ -1,8 +1,11 @@
+import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 class SupConLoss(nn.Module):
     """
@@ -186,6 +189,10 @@ def execute_validation_layer(
         embeddings = model(batch_seq.to(device), batch_stat.to(device))
         all_embeddings.append(embeddings.cpu())
         all_labels.append(batch_y)
+
+    if not all_embeddings:
+        logger.warning("execute_validation_layer: val_loader yielded no samples — skipping")
+        return 0.0, 0.0
 
     embeddings = torch.cat(all_embeddings, dim=0)
     labels = torch.cat(all_labels, dim=0)

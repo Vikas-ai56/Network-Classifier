@@ -149,6 +149,8 @@ def _process_chunk(df) -> List[Tuple[np.ndarray, np.ndarray, int]]:
 
     if rejected:
         logger.debug("Chunk: %d valid, %d rejected", len(samples), rejected)
+    if len(samples) == 0 and rejected > 0:
+        logger.warning("Chunk: 100%% rejected (%d rows) — check CATEGORY/PPI columns", rejected)
 
     return samples
 
@@ -318,11 +320,11 @@ class CESNETStreamingDataset(IterableDataset):
         import pandas as pd
 
         if self.split == "train":
-            source = self._cesnet_dataset.train_dataframe
+            source = self._cesnet_dataset.get_train_df()
         elif self.split == "val":
-            source = self._cesnet_dataset.val_dataframe
+            source = self._cesnet_dataset.get_val_df()
         else:
-            source = self._cesnet_dataset.test_dataframe
+            source = self._cesnet_dataset.get_test_df()
 
         if source is None:
             logger.warning("No %s data available in cesnet-datazoo config.", self.split)
