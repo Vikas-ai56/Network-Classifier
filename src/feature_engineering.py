@@ -181,9 +181,9 @@ def extract_seq_features(ppi: list, seq_len: int = SEQ_LEN) -> np.ndarray:
 
     # Emit soft warnings before clipping (logged, not raised)
     if np.any(raw_sizes > MAX_PACKET_SIZE):
-        logger.warning("OVERSIZE_PKT: max_size=%.1f", float(raw_sizes.max()))
+        logger.debug("OVERSIZE_PKT: max_size=%.1f", float(raw_sizes.max()))
     if np.any(raw_ipts > MAX_IPT_MS):
-        logger.warning("LONG_IPT: max_ipt=%.1fms", float(raw_ipts.max()))
+        logger.debug("LONG_IPT: max_ipt=%.1fms", float(raw_ipts.max()))
 
     sizes_padded = _pad_truncate_array(raw_sizes, seq_len)
     ipts_padded = _pad_truncate_array(raw_ipts, seq_len)

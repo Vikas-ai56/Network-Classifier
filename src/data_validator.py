@@ -284,13 +284,12 @@ class FlowValidator:
                 try:
                     phist_arr = np.asarray(phist, dtype=np.float32)
                     if phist_arr.sum() == 0:
-                        logger.warning("EMPTY_PHIST: %s", source_path)
+                        logger.debug("EMPTY_PHIST: %s", source_path)
                 except (TypeError, ValueError):
                     pass
 
-            # Check flow end reason warnings
             if _get("FLOW_ENDREASON_IDLE", 0) == 1:
-                logger.warning("IDLE_TIMEOUT: %s", source_path)
+                logger.debug("IDLE_TIMEOUT: %s", source_path)
 
         else:
             # ISCXVPN2016 path
