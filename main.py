@@ -26,29 +26,6 @@ except ImportError:
     HAS_WANDB = False
 
 
-def eval_knn(model, train_loader, val_loader, device, k: int = 5) -> float:
-    """Fit k-NN on frozen train embeddings, evaluate on val set."""
-    from sklearn.neighbors import KNeighborsClassifier
-
-    model.eval()
-    train_embs, train_labels = [], []
-    val_embs, val_labels = [], []
-
-    with torch.no_grad():
-        for seq, stat, labels in train_loader:
-            embs = model(seq.to(device), stat.to(device)).cpu().numpy()
-            train_embs.append(embs)
-            train_labels.extend(labels.numpy())
-        for seq, stat, labels in val_loader:
-            embs = model(seq.to(device), stat.to(device)).cpu().numpy()
-            val_embs.append(embs)
-            val_labels.extend(labels.numpy())
-
-    knn = KNeighborsClassifier(n_neighbors=k, metric="cosine")
-    knn.fit(np.concatenate(train_embs), train_labels)
-    acc = knn.score(np.concatenate(val_embs), val_labels)
-    return acc
-
 
 def train_model(
     data_dir: str,
@@ -229,19 +206,8 @@ def train_model(
             "loss": avg_loss,
         }, os.path.join("model", "checkpoint_latest.pth"))
 
-    # --- Final k-NN Evaluation ---
-    print("\n--- Final k-NN Evaluation (k=5) ---")
-    knn_acc = eval_knn(model, train_loader, val_loader, device, k=5)
-    print(f"k-NN Accuracy: {knn_acc:.4f}")
-
-    # Final geometric KPI report
-    final_intra, final_inter = execute_validation_layer(model, val_loader, device)
-    print(f"Final Geometric KPIs:")
-    print(f"  Intra-class cosine sim: {final_intra:.4f}  (target > 0.7)")
-    print(f"  Inter-class cosine sim: {final_inter:.4f}  (target < 0.3)")
-
+    print("\n--- Training complete ---")
     if HAS_WANDB:
-        wandb.log({"final/knn_acc": knn_acc, "final/intra_sim": final_intra, "final/inter_sim": final_inter})
         wandb.finish()
 
 
