@@ -144,8 +144,17 @@ def train_model(
         )
 
     best_acc = 0.0
+    start_epoch = 0
 
-    for epoch in range(epochs):
+    checkpoint_path = os.path.join("model", "checkpoint_latest.pth")
+    if os.path.exists(checkpoint_path):
+        ckpt = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        start_epoch = ckpt["epoch"] + 1
+        print(f"Resuming from epoch {start_epoch}")
+
+    for epoch in range(start_epoch, epochs):
         # --- Margin-Based SupCon Training ---
         model.train()
         total_loss = 0.0
