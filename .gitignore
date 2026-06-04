@@ -5,7 +5,7 @@ run_*.py
 model/
 __pycache__/
 .DS_Store
-/scripts
+
 TODO
 cesnet_sample.csv
 .vscode/
