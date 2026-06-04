@@ -140,13 +140,31 @@ def main():
 
     model = load_model(args.checkpoint, device)
 
-    if not os.path.exists(args.prototypes):
-        print(f"Prototypes not found at {args.prototypes}")
-        print("Run on the GPU instance first to build prototypes, then push to git.")
+    if os.path.exists(args.prototypes):
+        prototypes = torch.load(args.prototypes, map_location=device)
+        print(f"Loaded prototypes for classes: {sorted(prototypes.keys())}")
+    elif args.csv:
+        print("Prototypes not found. Run in stream mode on the GPU instance first to build them.")
         return
-
-    prototypes = torch.load(args.prototypes, map_location=device)
-    print(f"Loaded prototypes for classes: {sorted(prototypes.keys())}")
+    else:
+        print(f"\nBuilding prototypes from train split (max 2000/class)...")
+        from src.streaming_dataset import CESNETStreamingDataset
+        ds = CESNETStreamingDataset(data_root=args.data_root, size=args.size, split="train", shuffle_chunks=False)
+        loader = DataLoader(ds, batch_size=256, num_workers=2, persistent_workers=True)
+        bucket = {i: [] for i in range(NUM_CLASSES)}
+        model.eval()
+        with torch.no_grad():
+            for seq, stat, labels in loader:
+                embs = model(seq.to(device), stat.to(device)).cpu()
+                for emb, lbl in zip(embs, labels):
+                    c = lbl.item()
+                    if len(bucket[c]) < 2000:
+                        bucket[c].append(emb)
+                if all(len(v) >= 2000 for v in bucket.values()):
+                    break
+        prototypes = {c: F.normalize(torch.stack(v).mean(0), dim=0) for c, v in bucket.items() if v}
+        torch.save(prototypes, args.prototypes)
+        print(f"Prototypes built for {len(prototypes)} classes → saved to {args.prototypes}")
 
     if args.csv:
         evaluate_csv(model, prototypes, args.csv, device)
