@@ -27,57 +27,44 @@ from torch.utils.data import DataLoader, Dataset
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from src.models_dual_branch import DualBranchEncoder
+from src.feature_engineering import extract_seq_from_iscxvpn, extract_stat_from_iscxvpn
+from src.dataset_unified import LABEL_MAP, UNIFIED_CLASS_NAMES
 
 DATA_DIR = "dataset/netmamba/ISCXVPN2016/images_sampled_new"
 
 
 # ---------------------------------------------------------------------------
-# Inline dataset (avoids import issues with removed modules)
+# Dataset — uses same feature extraction as training (feature_engineering.py)
 # ---------------------------------------------------------------------------
 
-class _ISCXDataset(Dataset):
-    SEQ_LEN = 30
-
+class ISCXDataset(Dataset):
     def __init__(self, root_dir):
-        self.files   = sorted(glob.glob(os.path.join(root_dir, "**/*.json"), recursive=True))
-        self.classes = sorted(set(os.path.basename(os.path.dirname(p)) for p in self.files))
-        self.cls2idx = {c: i for i, c in enumerate(self.classes)}
-        self.labels  = [self.cls2idx[os.path.basename(os.path.dirname(p))] for p in self.files]
+        all_files = sorted(glob.glob(os.path.join(root_dir, "**/*.json"), recursive=True))
+        self.samples = []   # (path, unified_label)
+        skipped = 0
+        for path in all_files:
+            raw_label = os.path.basename(os.path.dirname(path)).lower()
+            if raw_label not in LABEL_MAP:
+                skipped += 1
+                continue
+            self.samples.append((path, LABEL_MAP[raw_label]))
+        present_ids = sorted(set(lbl for _, lbl in self.samples))
+        self.classes = [UNIFIED_CLASS_NAMES[i] for i in present_ids]
+        self.labels  = [lbl for _, lbl in self.samples]
+        if skipped:
+            print(f"  {skipped} samples skipped (unknown label)")
 
     def __len__(self):
-        return len(self.files)
-
-    def _pad(self, lst, n):
-        a = lst[:n]; a += [0.0] * (n - len(a)); return a
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        path  = self.files[idx]
-        label = self.cls2idx[os.path.basename(os.path.dirname(path))]
+        path, label = self.samples[idx]
         with open(path) as f:
             d = json.load(f)
-        L = self._pad(d.get("lengths",   []), self.SEQ_LEN)
-        I = self._pad(d.get("intervals", []), self.SEQ_LEN)
-        # 3-channel: size_norm, ipt_norm, direction proxy (sign of size change)
-        sizes = np.array(L, dtype=np.float32)
-        ipts  = np.array(I, dtype=np.float32)
-        dirs  = np.sign(np.diff(sizes, prepend=sizes[0])).astype(np.float32)
-        seq   = np.stack([
-            np.log1p(np.clip(sizes, 0, 1500)) / np.log1p(1500),
-            np.log1p(np.clip(ipts,  0, 5000)) / np.log1p(5000),
-            dirs,
-        ], axis=-1).astype(np.float32)
-        stat  = np.array([
-            np.mean(sizes), np.std(sizes), np.mean(ipts), np.std(ipts),
-            np.max(sizes),  np.min(ipts),
-            float(len([x for x in L if x > 0])),
-            float(np.sum(sizes)),
-            float(np.percentile(sizes, 25)), float(np.percentile(sizes, 75)),
-            float(np.percentile(ipts,  25)), float(np.percentile(ipts,  75)),
-            float(np.sum(ipts > 0)), float(np.mean(dirs)),
-            float(np.std(dirs)), float(np.max(ipts)),
-            float(np.min(sizes[sizes > 0]) if any(s > 0 for s in sizes) else 0.0),
-            float(np.median(sizes)),
-        ], dtype=np.float32)
+        lengths   = d.get("lengths",   [])
+        intervals = d.get("intervals", [])
+        seq  = extract_seq_from_iscxvpn(lengths, intervals)   # (30, 3)
+        stat = extract_stat_from_iscxvpn(lengths, intervals)  # (18,)
         return torch.tensor(seq), torch.tensor(stat), torch.tensor(label)
 
 
@@ -101,19 +88,17 @@ def extract_all(model, dataset, device, batch_size=256):
 # Zero-day evaluation
 # ---------------------------------------------------------------------------
 
-def zero_day_eval(embs, labels, classes, k_shot, device):
+def zero_day_eval(embs, labels, classes, class_ids, k_shot):
     """
     For each class as the held-out zero-day class:
       - Build prototypes for all OTHER classes from their full embeddings.
-      - Randomly pick k_shot examples of the held-out class → build its prototype.
+      - Randomly pick k_shot examples of the held-out class -> build its prototype.
       - Classify all remaining held-out samples by nearest prototype.
     """
-    n_classes = len(classes)
-    results   = {}
+    results = {}
 
-    for held_out_idx, held_out_name in enumerate(classes):
-        # Split embeddings
-        held_mask  = labels == held_out_idx
+    for held_out_id, held_out_name in zip(class_ids, classes):
+        held_mask  = labels == held_out_id
         known_mask = ~held_mask
 
         known_embs   = embs[known_mask]
@@ -126,8 +111,8 @@ def zero_day_eval(embs, labels, classes, k_shot, device):
 
         # Build prototypes for known classes
         prototypes = {}
-        for c in range(n_classes):
-            if c == held_out_idx:
+        for c in class_ids:
+            if c == held_out_id:
                 continue
             mask = known_labels == c
             if mask.any():
@@ -137,16 +122,16 @@ def zero_day_eval(embs, labels, classes, k_shot, device):
         perm    = torch.randperm(held_embs.shape[0])
         support = held_embs[perm[:k_shot]]
         query   = held_embs[perm[k_shot:]]
-        prototypes[held_out_idx] = F.normalize(support.mean(0), dim=0)
+        prototypes[held_out_id] = F.normalize(support.mean(0), dim=0)
 
         # Nearest-prototype classification on query set
-        class_ids    = sorted(prototypes.keys())
-        proto_matrix = torch.stack([prototypes[c] for c in class_ids])  # (n, d)
+        sorted_ids   = sorted(prototypes.keys())
+        proto_matrix = torch.stack([prototypes[c] for c in sorted_ids])  # (n, d)
 
-        sims   = torch.matmul(query, proto_matrix.T)       # (Q, n)
-        preds  = sims.argmax(dim=1)
-        pred_classes = [class_ids[p.item()] for p in preds]
-        acc    = sum(p == held_out_idx for p in pred_classes) / len(pred_classes)
+        sims         = torch.matmul(query, proto_matrix.T)               # (Q, n)
+        preds        = sims.argmax(dim=1)
+        pred_classes = [sorted_ids[p.item()] for p in preds]
+        acc = sum(p == held_out_id for p in pred_classes) / len(pred_classes)
         results[held_out_name] = acc
 
     return results
@@ -177,8 +162,9 @@ def main():
     model.to(device).eval()
 
     # Load dataset & extract embeddings
-    dataset = _ISCXDataset(args.data_dir)
-    print(f"Dataset    : {len(dataset)} samples | {len(dataset.classes)} classes")
+    dataset   = ISCXDataset(args.data_dir)
+    class_ids = sorted(set(dataset.labels))
+    print(f"Dataset    : {len(dataset)} samples | {len(dataset.classes)} classes: {dataset.classes}")
     print("Extracting embeddings...")
     embs, labels = extract_all(model, dataset, device)
     print(f"Embeddings : {embs.shape}\n")
@@ -186,13 +172,13 @@ def main():
     # Run zero-day eval over multiple trials for stability
     all_trials = {cls: [] for cls in dataset.classes}
     for trial in range(args.n_trials):
-        trial_results = zero_day_eval(embs, labels, dataset.classes, args.k_shot, device)
+        trial_results = zero_day_eval(embs, labels, dataset.classes, class_ids, args.k_shot)
         for cls, acc in trial_results.items():
             all_trials[cls].append(acc)
 
     # Report
     print("--- Per-Class Zero-Day Accuracy ---")
-    print(f"  {'Class':<18}  {'Mean Acc':>9}  {'Std':>7}  {'KPI ≥85%'}")
+    print(f"  {'Class':<18}  {'Mean Acc':>9}  {'Std':>7}  {'KPI >=85%'}")
     print(f"  {'-'*50}")
     all_accs = []
     for cls in dataset.classes:

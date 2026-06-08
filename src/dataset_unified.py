@@ -7,7 +7,7 @@ Supports:
   3. 5G Kaggle      — CSV with flow-level columns; detected at load time
 
 Output tensors per sample:
-  seq_tensor  : FloatTensor[SEQ_LEN=128, SEQ_INPUT_DIM=3]
+  seq_tensor  : FloatTensor[SEQ_LEN=30, SEQ_INPUT_DIM=3]
   stat_tensor : FloatTensor[STAT_INPUT_DIM=18]
   label       : int (unified class ID, 0–7)
 

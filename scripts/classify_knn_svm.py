@@ -24,55 +24,42 @@ from sklearn.metrics import classification_report, accuracy_score
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from src.models_dual_branch import DualBranchEncoder
+from src.feature_engineering import extract_seq_from_iscxvpn, extract_stat_from_iscxvpn
+from src.dataset_unified import LABEL_MAP, UNIFIED_CLASS_NAMES
 
 DATA_DIR = "dataset/netmamba/ISCXVPN2016/images_sampled_new"
 
 
 # ---------------------------------------------------------------------------
-# Dataset (inline, no removed-module dependency)
+# Dataset — uses same feature extraction as training (feature_engineering.py)
 # ---------------------------------------------------------------------------
 
-class _ISCXDataset(Dataset):
-    SEQ_LEN = 30
-
+class ISCXDataset(Dataset):
     def __init__(self, root_dir):
-        self.files   = sorted(glob.glob(os.path.join(root_dir, "**/*.json"), recursive=True))
-        self.classes = sorted(set(os.path.basename(os.path.dirname(p)) for p in self.files))
-        self.cls2idx = {c: i for i, c in enumerate(self.classes)}
-        print(f"  {len(self.files)} samples | {len(self.classes)} classes: {self.classes}")
+        all_files = sorted(glob.glob(os.path.join(root_dir, "**/*.json"), recursive=True))
+        self.samples = []   # (path, unified_label)
+        skipped = 0
+        for path in all_files:
+            raw_label = os.path.basename(os.path.dirname(path)).lower()
+            if raw_label not in LABEL_MAP:
+                skipped += 1
+                continue
+            self.samples.append((path, LABEL_MAP[raw_label]))
+        present_ids = sorted(set(lbl for _, lbl in self.samples))
+        self.classes = [UNIFIED_CLASS_NAMES[i] for i in present_ids]
+        print(f"  {len(self.samples)} samples | {len(self.classes)} classes | {skipped} skipped (unknown label)")
 
     def __len__(self):
-        return len(self.files)
-
-    def _pad(self, lst, n):
-        a = lst[:n]; a += [0.0] * (n - len(a)); return a
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        path  = self.files[idx]
-        label = self.cls2idx[os.path.basename(os.path.dirname(path))]
+        path, label = self.samples[idx]
         with open(path) as f:
             d = json.load(f)
-        L = self._pad(d.get("lengths",   []), self.SEQ_LEN)
-        I = self._pad(d.get("intervals", []), self.SEQ_LEN)
-        sizes = np.array(L, dtype=np.float32)
-        ipts  = np.array(I, dtype=np.float32)
-        dirs  = np.sign(np.diff(sizes, prepend=sizes[0])).astype(np.float32)
-        seq   = np.stack([
-            np.log1p(np.clip(sizes, 0, 1500)) / np.log1p(1500),
-            np.log1p(np.clip(ipts,  0, 5000)) / np.log1p(5000),
-            dirs,
-        ], axis=-1).astype(np.float32)
-        stat = np.array([
-            np.mean(sizes), np.std(sizes), np.mean(ipts), np.std(ipts),
-            np.max(sizes),  np.min(ipts),
-            float(len([x for x in L if x > 0])), float(np.sum(sizes)),
-            float(np.percentile(sizes, 25)), float(np.percentile(sizes, 75)),
-            float(np.percentile(ipts,  25)), float(np.percentile(ipts,  75)),
-            float(np.sum(ipts > 0)), float(np.mean(dirs)),
-            float(np.std(dirs)),     float(np.max(ipts)),
-            float(np.min(sizes[sizes > 0]) if any(s > 0 for s in sizes) else 0.0),
-            float(np.median(sizes)),
-        ], dtype=np.float32)
+        lengths   = d.get("lengths",   [])
+        intervals = d.get("intervals", [])
+        seq  = extract_seq_from_iscxvpn(lengths, intervals)   # (30, 3)
+        stat = extract_stat_from_iscxvpn(lengths, intervals)  # (18,)
         return torch.tensor(seq), torch.tensor(stat), torch.tensor(label)
 
 
@@ -89,7 +76,7 @@ def load_model(path, device):
 
 
 def extract_embeddings(model, data_dir, device, batch_size=256):
-    dataset = _ISCXDataset(data_dir)
+    dataset = ISCXDataset(data_dir)
     loader  = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     embs, labels = [], []
     with torch.no_grad():
