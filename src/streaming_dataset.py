@@ -229,7 +229,7 @@ def build_streaming_loaders(
     size: str = "S",
     batch_size: int = 128,
     chunk_size: int = 8192,
-    num_workers: int = 4,
+    num_workers: int = 2,
     val_size: str = "XS",
 ) -> Tuple[DataLoader, DataLoader]:
     train_ds = CESNETStreamingDataset(data_root=data_root, size=size, chunk_size=chunk_size, split="train", shuffle_chunks=True)
