@@ -41,7 +41,7 @@ def train_model(
     n_way: int = 5,
     k_shot: int = 5,
     k_query: int = 15,
-    warmup_epochs: int = 3,
+    warmup_epochs: int = 0,
     lr: float = 5e-4,
     streaming: bool = False,
     streaming_data_root: str = "/workspace/.cesnet_cache",
@@ -254,7 +254,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs",          type=int,   default=30)
     parser.add_argument("--batch_size",      type=int,   default=128)
     parser.add_argument("--lr",              type=float, default=5e-4)
-    parser.add_argument("--warmup_epochs",   type=int,   default=3)
+    parser.add_argument("--warmup_epochs",   type=int,   default=0)
     parser.add_argument("--streaming",       action="store_true")
     parser.add_argument("--streaming_root",  default="/workspace/.cesnet_cache")
     parser.add_argument("--streaming_size",  default="XS", choices=["XS", "S", "M"])
