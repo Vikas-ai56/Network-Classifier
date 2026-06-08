@@ -58,22 +58,24 @@ def train_model(
             num_workers=4,
         )
         eval_loader = None
+        eval_n_way  = n_way
         try:
             dataset = UnifiedFlowDataset(data_dir) if os.path.exists(data_dir) else None
         except Exception:
             dataset = None
         if dataset and len(dataset) > 0:
             n_available = len(np.unique(dataset.labels))
-            actual_n_way = min(n_way, n_available)
-            if actual_n_way >= 2:
+            eval_n_way  = min(n_way, n_available)
+            if eval_n_way >= 2:
                 eval_sampler = EpisodicSampler(
-                    labels=dataset.labels, n_way=actual_n_way,
+                    labels=dataset.labels, n_way=eval_n_way,
                     k_shot=k_shot, k_query=k_query, iterations=100,
                 )
                 eval_loader = DataLoader(dataset, batch_sampler=eval_sampler)
             else:
                 print("  Not enough classes for ProtoNet eval — skipping episodic eval")
     else:
+        eval_n_way = n_way
         print(f"Loading dataset from {data_dir}...")
         train_loader, val_loader, _, class_weights = build_dataloaders(
             data_dir=data_dir, batch_size=batch_size,
@@ -81,7 +83,7 @@ def train_model(
         )
         dataset = UnifiedFlowDataset(data_dir)
         eval_sampler = EpisodicSampler(
-            labels=dataset.labels, n_way=n_way,
+            labels=dataset.labels, n_way=eval_n_way,
             k_shot=k_shot, k_query=k_query, iterations=100,
         )
         eval_loader = DataLoader(dataset, batch_sampler=eval_sampler)
@@ -195,10 +197,10 @@ def train_model(
             with torch.no_grad():
                 for seq, stat, _ in eval_loader:
                     embs     = model(seq.to(device), stat.to(device))
-                    support  = embs[:n_way * k_shot]
-                    query    = embs[n_way * k_shot:]
-                    protos   = compute_prototypes(support, n_way, k_shot)
-                    _, acc   = prototypical_loss(protos, query, n_way, k_query)
+                    support  = embs[:eval_n_way * k_shot]
+                    query    = embs[eval_n_way * k_shot:]
+                    protos   = compute_prototypes(support, eval_n_way, k_shot)
+                    _, acc   = prototypical_loss(protos, query, eval_n_way, k_query)
                     eval_accs.append(acc.item())
         epoch_acc = np.mean(eval_accs) if eval_accs else 0.0
 
