@@ -63,11 +63,16 @@ def train_model(
         except Exception:
             dataset = None
         if dataset and len(dataset) > 0:
-            eval_sampler = EpisodicSampler(
-                labels=dataset.labels, n_way=n_way,
-                k_shot=k_shot, k_query=k_query, iterations=100,
-            )
-            eval_loader = DataLoader(dataset, batch_sampler=eval_sampler)
+            n_available = len(np.unique(dataset.labels))
+            actual_n_way = min(n_way, n_available)
+            if actual_n_way >= 2:
+                eval_sampler = EpisodicSampler(
+                    labels=dataset.labels, n_way=actual_n_way,
+                    k_shot=k_shot, k_query=k_query, iterations=100,
+                )
+                eval_loader = DataLoader(dataset, batch_sampler=eval_sampler)
+            else:
+                print("  Not enough classes for ProtoNet eval — skipping episodic eval")
     else:
         print(f"Loading dataset from {data_dir}...")
         train_loader, val_loader, _, class_weights = build_dataloaders(
