@@ -195,24 +195,9 @@ class CESNETStreamingDataset(IterableDataset):
             start = i * self.chunk_size
             yield source.iloc[start: start + self.chunk_size]
 
-    def _iter_chunks_for_worker(self, worker_info):
-        all_chunks = list(self._iter_raw_chunks())
-        if worker_info is None:
-            yield from all_chunks
-            return
-        for i, chunk in enumerate(all_chunks):
-            if i % worker_info.num_workers == worker_info.id:
-                yield chunk
-
     def __iter__(self) -> Iterator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
-        import pandas as pd
-        worker_info = torch.utils.data.get_worker_info()
-        for chunk in self._iter_chunks_for_worker(worker_info):
-            if isinstance(chunk, list):
-                try:
-                    chunk = pd.concat(chunk, ignore_index=True)
-                except Exception:
-                    continue
+        # num_workers=0 only: stream chunks lazily without materialising all of them.
+        for chunk in self._iter_raw_chunks():
             samples = _process_chunk(chunk, self._app_int_map)
             if self.shuffle_chunks:
                 random.shuffle(samples)
@@ -229,7 +214,7 @@ def build_streaming_loaders(
     size: str = "S",
     batch_size: int = 128,
     chunk_size: int = 8192,
-    num_workers: int = 2,
+    num_workers: int = 0,
     val_size: str = "XS",
 ) -> Tuple[DataLoader, DataLoader]:
     train_ds = CESNETStreamingDataset(data_root=data_root, size=size, chunk_size=chunk_size, split="train", shuffle_chunks=True)

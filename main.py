@@ -61,7 +61,7 @@ def train_model(
             size=streaming_size,
             batch_size=batch_size,
             chunk_size=8192,
-            num_workers=4,
+            num_workers=0,
         )
         eval_loader = None
         eval_n_way  = n_way
