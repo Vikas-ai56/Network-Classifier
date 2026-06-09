@@ -9,9 +9,15 @@ Target KPIs:
 """
 
 import os
+import logging
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+
+# Silence per-flow data-quality warnings (EMPTY_PHIST, LONG_IPT, ZERO_STD, ...)
+# These fire thousands of times on CESNET and are expected/handled, not errors.
+logging.getLogger("src.feature_engineering").setLevel(logging.ERROR)
+logging.getLogger("src.data_validator").setLevel(logging.ERROR)
 
 from src.models_dual_branch import DualBranchEncoder
 from src.dataset_unified import UnifiedFlowDataset, build_dataloaders, NUM_CLASSES
