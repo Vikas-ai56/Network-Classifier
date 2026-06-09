@@ -953,6 +953,7 @@ def build_dataloaders(
             sampler=sampler,
             num_workers=num_workers,
             pin_memory=True,
+            drop_last=True,
         )
     else:
         train_loader = DataLoader(
@@ -961,6 +962,7 @@ def build_dataloaders(
             shuffle=True,
             num_workers=num_workers,
             pin_memory=True,
+            drop_last=True,
         )
 
     val_loader = DataLoader(

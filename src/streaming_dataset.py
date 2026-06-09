@@ -235,7 +235,9 @@ def build_streaming_loaders(
     train_ds = CESNETStreamingDataset(data_root=data_root, size=size, chunk_size=chunk_size, split="train", shuffle_chunks=True)
     val_ds = CESNETStreamingDataset(data_root=data_root, size=val_size, chunk_size=chunk_size, split="val", shuffle_chunks=False)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, pin_memory=True, persistent_workers=True)
+    # drop_last=True: prevents a trailing size-1 batch from crashing BatchNorm1d
+    # in the projection head (BN requires >1 sample in train mode).
+    train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, pin_memory=True, persistent_workers=True, drop_last=True)
     val_loader = DataLoader(val_ds, batch_size=batch_size, num_workers=num_workers, pin_memory=True, persistent_workers=True)
 
     logger.info("Streaming loaders ready — train=%s val=%s batch=%d workers=%d", size, val_size, batch_size, num_workers)
