@@ -135,8 +135,35 @@ class HardNegativeMarginLoss(nn.Module):
         return total
 
 
-# Keep old name as alias so existing checkpoints / configs don't break
-MarginBasedSupConLoss = HardNegativeMarginLoss
+class MarginBasedSupConLoss(nn.Module):
+    """
+    Vanilla margin loss — penalises ALL positive pairs below lambda_pos
+    and ALL negative pairs above lambda_neg. No hard mining, no auxiliary loss.
+    Converges faster and to lower loss values than HardNegativeMarginLoss.
+    """
+    def __init__(self, lambda_pos: float = 0.7, lambda_neg: float = 0.3):
+        super().__init__()
+        self.lambda_pos = lambda_pos
+        self.lambda_neg = lambda_neg
+
+    def forward(self, features: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        batch_size = features.shape[0]
+        device = features.device
+
+        sim_matrix   = torch.matmul(features, features.T)
+        labels_col   = labels.contiguous().view(-1, 1)
+        label_matrix = torch.eq(labels_col, labels_col.T)
+        identity     = torch.eye(batch_size, dtype=torch.bool, device=device)
+
+        pos_mask = label_matrix & ~identity
+        neg_mask = ~label_matrix
+
+        pos_loss  = (pos_mask.float() * torch.clamp(self.lambda_pos - sim_matrix, min=0.0)).sum()
+        pos_count = pos_mask.sum().clamp(min=1)
+        neg_loss  = (neg_mask.float() * torch.clamp(sim_matrix - self.lambda_neg, min=0.0)).sum()
+        neg_count = neg_mask.sum().clamp(min=1)
+
+        return pos_loss / pos_count + neg_loss / neg_count
 
 
 # ---------------------------------------------------------------------------
