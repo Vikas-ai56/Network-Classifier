@@ -22,7 +22,7 @@ logging.getLogger("src.data_validator").setLevel(logging.ERROR)
 from src.models_dual_branch import DualBranchEncoder
 from src.dataset_unified import UnifiedFlowDataset, build_dataloaders, NUM_CLASSES
 from src.train_supcon import (
-    HardNegativeMarginLoss,
+    MarginBasedSupConLoss,
     EpisodicSampler,
     compute_prototypes,
     prototypical_loss,
@@ -42,13 +42,13 @@ except ImportError:
 
 def train_model(
     data_dir: str,
-    epochs: int = 30,
-    batch_size: int = 128,
+    epochs: int = 35,
+    batch_size: int = 256,
     n_way: int = 5,
     k_shot: int = 5,
     k_query: int = 15,
     warmup_epochs: int = 0,
-    lr: float = 5e-4,
+    lr: float = 1e-3,
     streaming: bool = False,
     streaming_data_root: str = "/workspace/.cesnet_cache",
     streaming_size: str = "XS",
@@ -103,14 +103,7 @@ def train_model(
     )
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-    # Loss: hard negative mining + auxiliary SupCon
-    criterion = HardNegativeMarginLoss(
-        lambda_pos=0.7,
-        lambda_neg=0.3,
-        hard_neg_ratio=0.5,
-        supcon_weight=0.3,
-        temperature=0.07,
-    )
+    criterion = MarginBasedSupConLoss(lambda_pos=0.7, lambda_neg=0.3)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
 
@@ -136,7 +129,7 @@ def train_model(
         wandb.init(project="samsung-ennovatex", config={
             "epochs": epochs, "batch_size": batch_size, "lr": lr,
             "warmup_epochs": warmup_epochs, "d_model": 256, "embed_dim": 256,
-            "loss": "HardNegativeMarginLoss+SupCon",
+            "loss": "MarginBasedSupConLoss",
         })
 
     best_acc = 0.0
@@ -257,9 +250,9 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir",        default="dataset/netmamba/ISCXVPN2016/images_sampled_new")
-    parser.add_argument("--epochs",          type=int,   default=30)
-    parser.add_argument("--batch_size",      type=int,   default=128)
-    parser.add_argument("--lr",              type=float, default=5e-4)
+    parser.add_argument("--epochs",          type=int,   default=35)
+    parser.add_argument("--batch_size",      type=int,   default=256)
+    parser.add_argument("--lr",              type=float, default=1e-3)
     parser.add_argument("--warmup_epochs",   type=int,   default=0)
     parser.add_argument("--streaming",       action="store_true")
     parser.add_argument("--streaming_root",  default="/workspace/.cesnet_cache")
