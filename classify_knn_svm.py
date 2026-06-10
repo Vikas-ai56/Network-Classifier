@@ -90,8 +90,7 @@ def main():
 
     # Logistic Regression
     print("\n=== Logistic Regression (max_iter=2000) ===")
-    lr_clf = LogisticRegression(C=10, max_iter=2000, solver="lbfgs",
-                                multi_class="multinomial", random_state=42)
+    lr_clf = LogisticRegression(C=10, max_iter=2000, solver="lbfgs", random_state=42)
     lr_clf.fit(X_train, y_train)
     y_pred_lr = lr_clf.predict(X_test)
     acc_lr = accuracy_score(y_test, y_pred_lr)
