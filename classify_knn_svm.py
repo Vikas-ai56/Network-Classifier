@@ -11,6 +11,7 @@ import torch
 from torch.utils.data import DataLoader
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, accuracy_score
 from sklearn.model_selection import train_test_split
 
@@ -87,10 +88,21 @@ def main():
     print(f"Accuracy : {acc_svm:.4f}  ({'✓ KPI MET' if acc_svm >= 0.90 else '✗ below KPI'})")
     print(classification_report(y_test, y_pred_svm, target_names=target_names))
 
-    best_acc = max(acc_knn, acc_svm)
+    # Logistic Regression
+    print("\n=== Logistic Regression (max_iter=2000) ===")
+    lr_clf = LogisticRegression(C=10, max_iter=2000, solver="lbfgs",
+                                multi_class="multinomial", random_state=42)
+    lr_clf.fit(X_train, y_train)
+    y_pred_lr = lr_clf.predict(X_test)
+    acc_lr = accuracy_score(y_test, y_pred_lr)
+    print(f"Accuracy : {acc_lr:.4f}  ({'✓ KPI MET' if acc_lr >= 0.90 else '✗ below KPI'})")
+    print(classification_report(y_test, y_pred_lr, target_names=target_names))
+
+    best_acc = max(acc_knn, acc_svm, acc_lr)
     print("\n=== KPI Summary ===")
     print(f"k-NN : {acc_knn:.4f}  {'✓ KPI MET' if acc_knn >= 0.90 else '✗ below KPI'}")
     print(f"SVM  : {acc_svm:.4f}  {'✓ KPI MET' if acc_svm >= 0.90 else '✗ below KPI'}")
+    print(f"LR   : {acc_lr:.4f}  {'✓ KPI MET' if acc_lr >= 0.90 else '✗ below KPI'}")
     print(f"Best : {best_acc:.4f}  {'✓ ≥90% KPI MET' if best_acc >= 0.90 else '✗ below 90% KPI'}")
 
 
