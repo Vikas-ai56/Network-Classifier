@@ -65,6 +65,9 @@ LABEL_MAP: Dict[str, int] = {
     "youtube": 0,
     "netflix": 0,
     "vimeo": 0,
+    # ISCXVPN2016: "streaming" dir contains captured video/audio streaming
+    # sessions (YouTube, Vimeo). Source: Draper-Gil et al. (2016) Table 1.
+    "streaming": 0,
     # class 1 — audio_streaming
     "audio": 1,
     "spotify": 1,
@@ -84,6 +87,11 @@ LABEL_MAP: Dict[str, int] = {
     "sftp": 4,
     "ftps": 4,
     "scp": 4,
+    # ISCXVPN2016: "ftp" dir contains FTP bulk data transfers.
+    # "p2p" dir contains BitTorrent peer-to-peer file sharing.
+    # Both are file transfer protocols. Source: Draper-Gil et al. (2016) Table 1.
+    "ftp": 4,
+    "p2p": 4,
     # class 5 — browsing
     "web": 5,
     "browsing": 5,
@@ -94,6 +102,12 @@ LABEL_MAP: Dict[str, int] = {
     "skype": 6,
     "hangouts": 6,
     "zoom": 6,
+    # ISCXVPN2016: "chat" dir contains instant messaging sessions (Skype chat,
+    # ICQ, AIM, Facebook chat). "email" dir contains SMTP/IMAP mail sessions.
+    # Both are person-to-person communication protocols.
+    # Source: Draper-Gil et al. (2016) Table 1.
+    "chat": 6,
+    "email": 6,
     # class 7 — vpn_tunnel
     "vpn-voip": 7,
     "vpn-streaming": 7,
