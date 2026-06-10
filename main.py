@@ -116,7 +116,7 @@ def train_model(
     model.to(device)
 
     # Mixed precision on GPU
-    scaler = torch.cuda.amp.GradScaler() if device.type == "cuda" else None
+    scaler = torch.amp.GradScaler("cuda") if device.type == "cuda" else None
 
     gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
     print(f"Device        : {gpu_name}")
@@ -138,7 +138,7 @@ def train_model(
     # Resume from checkpoint if available
     start_epoch = 0
     if os.path.exists(checkpoint_path):
-        ckpt = torch.load(checkpoint_path, map_location=device)
+        ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
         try:
             model.load_state_dict(ckpt["model_state_dict"])
             optimizer.load_state_dict(ckpt["optimizer_state_dict"])
@@ -162,7 +162,7 @@ def train_model(
             optimizer.zero_grad()
 
             if scaler is not None:
-                with torch.cuda.amp.autocast():
+                with torch.amp.autocast("cuda"):
                     embeddings = model(seq, stat)
                     loss = criterion(embeddings, labels)
                 scaler.scale(loss).backward()
