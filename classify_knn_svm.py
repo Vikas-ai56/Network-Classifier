@@ -43,12 +43,13 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    # Load model
+    # Load model (handles both pretrain and finetune checkpoint formats)
     model = DualBranchEncoder(seq_input_dim=3, stat_input_dim=18, d_model=256, embed_dim=256)
     ckpt = torch.load(args.model_path, map_location=device, weights_only=False)
-    model.load_state_dict(ckpt["model_state_dict"])
+    key = "encoder_state_dict" if "encoder_state_dict" in ckpt else "model_state_dict"
+    model.load_state_dict(ckpt[key])
     model.to(device)
-    print(f"Loaded checkpoint from epoch {ckpt.get('epoch', 0) + 1}")
+    print(f"Loaded checkpoint from epoch {ckpt.get('epoch', 0) + 1}  (key={key})")
 
     # Load ISCXVPN2016
     dataset = UnifiedFlowDataset(args.data_dir)
