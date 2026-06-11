@@ -97,7 +97,7 @@ def train_model(
 
     model = DualBranchEncoder(
         seq_input_dim=3,
-        stat_input_dim=18,
+        stat_input_dim=16,
         d_model=128,
         embed_dim=256,
     )
@@ -115,7 +115,7 @@ def train_model(
             config={
                 "epochs": epochs, "batch_size": batch_size, "lr": 1e-3,
                 "embed_dim": 256, "seq_len": 30, "seq_input_dim": 3,
-                "stat_input_dim": 18, "lambda_pos": 0.7, "lambda_neg": 0.3,
+                "stat_input_dim": 16, "lambda_pos": 0.7, "lambda_neg": 0.3,
                 "loss": "MarginBasedSupCon",
             },
         )
@@ -136,10 +136,10 @@ def train_model(
         model.train()
         total_loss = 0.0
         n_batches = 0
-        for batch_idx, (seq, stat, labels) in enumerate(train_loader):
-            seq, stat, labels = seq.to(device), stat.to(device), labels.to(device)
+        for batch_idx, (seq, stat, ports, labels) in enumerate(train_loader):
+            seq, stat, ports, labels = seq.to(device), stat.to(device), ports.to(device), labels.to(device)
             optimizer.zero_grad()
-            embeddings = model(seq, stat)
+            embeddings = model(seq, stat, ports)
             loss = criterion(embeddings, labels)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -160,8 +160,8 @@ def train_model(
         eval_accs = []
         if eval_loader is not None:
             with torch.no_grad():
-                for seq, stat, _ in eval_loader:
-                    embs = model(seq.to(device), stat.to(device))
+                for seq, stat, ports, _ in eval_loader:
+                    embs = model(seq.to(device), stat.to(device), ports.to(device))
                     support = embs[: n_way * k_shot]
                     query = embs[n_way * k_shot :]
                     prototypes = compute_prototypes(support, n_way, k_shot)

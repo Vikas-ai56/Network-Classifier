@@ -117,6 +117,11 @@ UNIFIED_CLASS_NAMES: Dict[int, str] = {
 NUM_CLASSES: int = 8
 MIN_SAMPLES_PER_CLASS: int = 200
 
+# Zero-day generalization: these classes are EXCLUDED from the training split
+# so the model is evaluated on truly unseen traffic categories.
+# 1 = audio_streaming (music), 2 = gaming
+ZERO_DAY_CLASSES: frozenset = frozenset({1, 2})
+
 # Set of lower-cased source labels recognized by the taxonomy (for validator)
 _KNOWN_SOURCE_LABELS: frozenset = frozenset(LABEL_MAP.keys())
 
@@ -224,16 +229,17 @@ class UnifiedFlowDataset(Dataset):
     def __len__(self) -> int:
         return len(self._samples)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         seq_data, stat_data, label = self._samples[idx]
-        seq_tensor = torch.from_numpy(seq_data)      # (seq_len, 3)
-        stat_tensor = torch.from_numpy(stat_data)    # (18,)
+        seq_tensor = torch.from_numpy(seq_data)               # (seq_len, 3)
+        stat_tensor = torch.from_numpy(stat_data)             # (16,)
+        ports_tensor = torch.zeros(2, dtype=torch.long)       # port info unavailable in offline datasets
         label_tensor = torch.tensor(label, dtype=torch.long)
 
         if self.transform is not None:
             seq_tensor, stat_tensor = self.transform(seq_tensor, stat_tensor)
 
-        return seq_tensor, stat_tensor, label_tensor
+        return seq_tensor, stat_tensor, ports_tensor, label_tensor
 
     # ------------------------------------------------------------------
     # Internal loading orchestrator
@@ -648,43 +654,35 @@ class UnifiedFlowDataset(Dataset):
         mean_size: float,
         std_size: float,
         mean_ipt: float,
-        std_ipt: float,
+        jitter_estimate: float,
         n_packets: int,
     ) -> np.ndarray:
         """
         Build a stat_data array from flow-level summary fields (no PHIST available).
 
+        Volume features (bytes_total, duration_ms) are excluded — same policy as
+        extract_stat_features() to prevent shortcut learning.
         PHIST bins are derived by placing all packets into the mean_size bin.
-        The result is shape (18,) float32.
+        The result is shape (16,) float32.
         """
-        import math as _math
-
-        _lp_bytes = math.log1p
-        MAX_BYTES = 10_000_000.0
         MAX_PACKETS = 10_000.0
-        MAX_DURATION_MS = 300_000.0
         MAX_PKT = 1500.0
         MAX_IPT = 5000.0
-        _log1p_mb = math.log1p(MAX_BYTES)
         _log1p_mp = math.log1p(MAX_PACKETS)
-        _log1p_md = math.log1p(MAX_DURATION_MS)
         _log1p_mpkt = math.log1p(MAX_PKT)
         _log1p_mipt = math.log1p(MAX_IPT)
 
         bytes_total = bytes_fwd + bytes_rev
         pkts_total = pkts_fwd + pkts_rev
 
-        bytes_total_norm = math.log1p(min(bytes_total, MAX_BYTES)) / _log1p_mb
         bytes_ratio = bytes_fwd / (bytes_total + 1.0)
         packets_total_norm = math.log1p(min(pkts_total, MAX_PACKETS)) / _log1p_mp
         packets_ratio = pkts_fwd / (pkts_total + 1.0)
-        duration_norm = math.log1p(min(duration_ms, MAX_DURATION_MS)) / _log1p_md
         mean_pkt_size_norm = math.log1p(min(mean_size, MAX_PKT)) / _log1p_mpkt
         std_pkt_size_norm = math.log1p(min(std_size, MAX_PKT)) / _log1p_mpkt
         mean_ipt_norm = math.log1p(min(mean_ipt, MAX_IPT)) / _log1p_mipt
-        std_ipt_norm = math.log1p(min(std_ipt, MAX_IPT)) / _log1p_mipt
+        jitter_estimate_norm = math.log1p(min(jitter_estimate, MAX_IPT)) / _log1p_mipt
 
-        # Derive PHIST from mean_size only — place all n_packets in correct bin
         from src.feature_engineering import compute_phist_from_lengths
         phist = compute_phist_from_lengths([mean_size] * n_packets)
 
@@ -692,11 +690,13 @@ class UnifiedFlowDataset(Dataset):
 
         stat_data = np.array(
             [
-                bytes_total_norm, bytes_ratio,
-                packets_total_norm, packets_ratio,
-                duration_norm,
-                mean_pkt_size_norm, std_pkt_size_norm,
-                mean_ipt_norm, std_ipt_norm,
+                bytes_ratio,
+                packets_total_norm,
+                packets_ratio,
+                mean_pkt_size_norm,
+                std_pkt_size_norm,
+                mean_ipt_norm,
+                jitter_estimate_norm,
                 phist[0], phist[1], phist[2], phist[3],
                 phist[4], phist[5], phist[6], phist[7],
                 ppi_len_norm,
@@ -918,6 +918,15 @@ def build_dataloaders(
     for cls_id, indices in class_to_indices.items():
         shuffled = rng.permutation(indices)
         n = len(shuffled)
+
+        if cls_id in ZERO_DAY_CLASSES:
+            # Zero-day classes are NEVER in training — only val and test
+            n_test = max(1, int(n * test_split))
+            n_val = n - n_test
+            val_indices.extend(shuffled[:n_val].tolist())
+            test_indices.extend(shuffled[n_val:].tolist())
+            continue
+
         n_test = max(1, int(n * test_split))
         n_val = max(1, int(n * val_split))
         n_train = n - n_test - n_val

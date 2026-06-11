@@ -246,6 +246,7 @@ if len(samples) < 16:
 seqs   = torch.tensor(np.stack([s[0] for s in samples]), dtype=torch.float32)
 stats_ = torch.tensor(np.stack([s[1] for s in samples]), dtype=torch.float32)
 labels = torch.tensor([s[2] for s in samples], dtype=torch.long)
+ports_ = torch.zeros(len(samples), 2, dtype=torch.long)  # dummy ports (not in CSV sample)
 
 # 2a. Visualize tensors right before model input
 print("\n── 2a. Tensor sanity check ──")
@@ -280,7 +281,7 @@ loss_fn = MarginBasedSupConLoss()
 model.eval()
 
 with torch.no_grad():
-    emb = model(seqs, stats_)
+    emb = model(seqs, stats_, ports_)
     emb_norm = torch.nn.functional.normalize(emb, dim=-1)
     intra_init, inter_init = compute_intra_inter(emb_norm, labels)
     loss_init = loss_fn(emb, labels).item()
@@ -302,7 +303,7 @@ else:
 # 2c. Zero-input baseline
 print("\n── 2c. Zero-input baseline ──")
 with torch.no_grad():
-    emb_zero = model(torch.zeros_like(seqs), torch.zeros_like(stats_))
+    emb_zero = model(torch.zeros_like(seqs), torch.zeros_like(stats_), ports_)
     loss_zero = loss_fn(emb_zero, labels).item()
 
 print(f"  Real input loss : {loss_init:.4f}")
@@ -323,12 +324,13 @@ opt = torch.optim.Adam(model.parameters(), lr=3e-4)
 
 batch_seq   = seqs[:32]
 batch_stat  = stats_[:32]
+batch_ports = ports_[:32]
 batch_labels = labels[:32]
 
 final_loss = None
 for step in range(150):
     opt.zero_grad()
-    emb = model(batch_seq, batch_stat)
+    emb = model(batch_seq, batch_stat, batch_ports)
     loss = loss_fn(emb, batch_labels)
     loss.backward()
     opt.step()

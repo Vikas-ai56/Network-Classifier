@@ -185,10 +185,10 @@ def execute_validation_layer(
     all_embeddings = []
     all_labels = []
 
-    for i, (batch_seq, batch_stat, batch_y) in enumerate(val_loader):
+    for i, (batch_seq, batch_stat, batch_ports, batch_y) in enumerate(val_loader):
         if i >= 500:  # cap to avoid OOM on sim_matrix computation
             break
-        embeddings = model(batch_seq.to(device), batch_stat.to(device))
+        embeddings = model(batch_seq.to(device), batch_stat.to(device), batch_ports.to(device))
         all_embeddings.append(embeddings.cpu())
         all_labels.append(batch_y)
 

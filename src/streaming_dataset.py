@@ -7,7 +7,7 @@ import logging
 import math
 import os
 import random
-from typing import Iterator, List, Optional, Tuple
+from typing import Iterator, List, Optional, Set, Tuple
 
 import numpy as np
 import torch
@@ -27,6 +27,10 @@ _CESNET_CAT_MAP: dict = {
     "file sharing": 4, "search": 5, "blogs & news": 5, "e-commerce": 5,
     "information systems": 5, "instant messaging": 6, "mail": 6, "videoconferencing": 6,
 }
+
+# Class IDs withheld from training for zero-day generalization evaluation
+# 1 = music/audio_streaming, 2 = gaming
+_ZERO_DAY_CLASSES: Set[int] = {1, 2}
 
 
 def _build_app_int_map(cesnet_dataset) -> dict:
@@ -71,7 +75,17 @@ def _parse_ppi(raw) -> Optional[list]:
     return None
 
 
-def _process_chunk(df, app_int_map=None) -> List[Tuple[np.ndarray, np.ndarray, int]]:
+def _process_chunk(
+    df,
+    app_int_map=None,
+    excluded_labels: Optional[Set[int]] = None,
+) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray, int]]:
+    """
+    Process a raw DataFrame chunk into (seq, stat, ports, label) tuples.
+
+    excluded_labels: if set, flows whose unified label is in this set are skipped.
+                     Used to withhold zero-day classes from the training split.
+    """
     samples, rejected = [], 0
 
     for _, row in df.iterrows():
@@ -87,6 +101,14 @@ def _process_chunk(df, app_int_map=None) -> List[Tuple[np.ndarray, np.ndarray, i
                 rejected += 1
                 continue
             unified_label = LABEL_MAP[raw_label]
+
+        # Zero-day generalization: skip excluded classes in the training split
+        if excluded_labels and unified_label in excluded_labels:
+            continue
+
+        src_port = int(row.get("SRC_PORT", 0)) % 65536
+        dst_port = int(row.get("DST_PORT", 0)) % 65536
+        ports_data = np.array([src_port, dst_port], dtype=np.int64)
 
         ppi = _parse_ppi(row.get("PPI"))
         if ppi is None:
@@ -134,7 +156,7 @@ def _process_chunk(df, app_int_map=None) -> List[Tuple[np.ndarray, np.ndarray, i
             rejected += 1
             continue
 
-        samples.append((seq_data, stat_data, unified_label))
+        samples.append((seq_data, stat_data, ports_data, unified_label))
 
     if rejected:
         logger.debug("Chunk: %d valid, %d rejected", len(samples), rejected)
@@ -158,6 +180,8 @@ class CESNETStreamingDataset(IterableDataset):
         self.chunk_size = chunk_size
         self.split = split
         self.shuffle_chunks = shuffle_chunks
+        # Withhold zero-day classes from training; allow in val/test
+        self._zero_day_excluded = _ZERO_DAY_CLASSES if split == "train" else set()
         self._init_dataset()
 
     def _init_dataset(self) -> None:
@@ -204,7 +228,7 @@ class CESNETStreamingDataset(IterableDataset):
             if i % worker_info.num_workers == worker_info.id:
                 yield chunk
 
-    def __iter__(self) -> Iterator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    def __iter__(self) -> Iterator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
         import pandas as pd
         worker_info = torch.utils.data.get_worker_info()
         for chunk in self._iter_chunks_for_worker(worker_info):
@@ -213,13 +237,14 @@ class CESNETStreamingDataset(IterableDataset):
                     chunk = pd.concat(chunk, ignore_index=True)
                 except Exception:
                     continue
-            samples = _process_chunk(chunk, self._app_int_map)
+            samples = _process_chunk(chunk, self._app_int_map, excluded_labels=self._zero_day_excluded)
             if self.shuffle_chunks:
                 random.shuffle(samples)
-            for seq_data, stat_data, label in samples:
+            for seq_data, stat_data, ports_data, label in samples:
                 yield (
                     torch.from_numpy(seq_data),
                     torch.from_numpy(stat_data),
+                    torch.from_numpy(ports_data),
                     torch.tensor(label, dtype=torch.long),
                 )
 
