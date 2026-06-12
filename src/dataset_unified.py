@@ -162,8 +162,8 @@ def _find_col(df_columns: List[str], candidates: frozenset) -> Optional[str]:
 # Internal sample tuple
 # ---------------------------------------------------------------------------
 
-# Each loaded sample is stored as (seq_data: ndarray, stat_data: ndarray, label: int)
-_Sample = Tuple[np.ndarray, np.ndarray, int]
+# Each loaded sample is (seq_data: ndarray, stat_data: ndarray, ports_data: ndarray, label: int)
+_Sample = Tuple[np.ndarray, np.ndarray, np.ndarray, int]
 
 
 # ---------------------------------------------------------------------------
@@ -238,16 +238,17 @@ class UnifiedFlowDataset(Dataset):
     def __len__(self) -> int:
         return len(self._samples)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        seq_data, stat_data, label = self._samples[idx]
-        seq_tensor = torch.from_numpy(seq_data)      # (seq_len, 3)
-        stat_tensor = torch.from_numpy(stat_data)    # (18,)
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        seq_data, stat_data, ports_data, label = self._samples[idx]
+        seq_tensor   = torch.from_numpy(seq_data)            # (seq_len, 3)
+        stat_tensor  = torch.from_numpy(stat_data)           # (16,)
+        ports_tensor = torch.from_numpy(ports_data)          # (2,)  int64
         label_tensor = torch.tensor(label, dtype=torch.long)
 
         if self.transform is not None:
             seq_tensor, stat_tensor = self.transform(seq_tensor, stat_tensor)
 
-        return seq_tensor, stat_tensor, label_tensor
+        return seq_tensor, stat_tensor, ports_tensor, label_tensor
 
     # ------------------------------------------------------------------
     # Internal loading orchestrator
@@ -353,8 +354,10 @@ class UnifiedFlowDataset(Dataset):
 
             unified_label = LABEL_MAP[raw_label]
             unified_class_name = UNIFIED_CLASS_NAMES[unified_label]
+            # ISCXVPN2016 JSON has no port information; use zeros as placeholder
+            ports_data = np.zeros(2, dtype=np.int64)
 
-            self._samples.append((seq_data, stat_data, unified_label))
+            self._samples.append((seq_data, stat_data, ports_data, unified_label))
             self.report.record_load(unified_class_name)
 
     # ------------------------------------------------------------------
@@ -469,7 +472,10 @@ class UnifiedFlowDataset(Dataset):
 
             unified_label = LABEL_MAP[raw_label]
             unified_class_name = UNIFIED_CLASS_NAMES[unified_label]
-            self._samples.append((seq_data, stat_data, unified_label))
+            src_port = int(row.get("SRC_PORT", row.get("SOURCE_PORT", 0)))
+            dst_port = int(row.get("DST_PORT", row.get("DESTINATION_PORT", 0)))
+            ports_data = np.array([src_port, dst_port], dtype=np.int64)
+            self._samples.append((seq_data, stat_data, ports_data, unified_label))
             self.report.record_load(unified_class_name)
 
     # ------------------------------------------------------------------
@@ -565,7 +571,8 @@ class UnifiedFlowDataset(Dataset):
 
                 unified_label = LABEL_MAP[raw_label]
                 unified_class_name = UNIFIED_CLASS_NAMES[unified_label]
-                self._samples.append((seq_data, stat_data, unified_label))
+                ports_data = np.zeros(2, dtype=np.int64)  # 5G CSV has no port columns
+                self._samples.append((seq_data, stat_data, ports_data, unified_label))
                 self.report.record_load(unified_class_name)
 
     def _extract_5g_summary_only(

@@ -55,8 +55,11 @@ class SequenceBranch(nn.Module):
     Branch A: Temporal Pulse — processes per-packet features.
 
     Pipeline:
-      input → linear projection → Mamba layers (or BiLSTM fallback)
-             → multi-head self-attention → LayerNorm → attention pooling
+      input → linear projection → Mamba layers (or BiLSTM)
+             → final hidden state extraction → LayerNorm
+
+    Mamba path:  returns x[:, -1, :] — the final position's hidden state.
+    BiLSTM path: returns cat(hn[-2], hn[-1]) — forward + backward final states.
 
     Input:  (batch, seq_len=30, input_dim=3)  [size_norm, ipt_norm, direction]
     Output: (batch, d_model=256)
@@ -72,6 +75,7 @@ class SequenceBranch(nn.Module):
             ])
             self.is_mamba = True
         else:
+            # hidden_size = d_model // 2 so that cat(fwd, bwd) = d_model
             self.encoder = nn.LSTM(
                 input_size=d_model,
                 hidden_size=d_model // 2,
@@ -82,31 +86,23 @@ class SequenceBranch(nn.Module):
             )
             self.is_mamba = False
 
-        # Multi-head self-attention for global context across the sequence
-        self.self_attn = nn.MultiheadAttention(
-            embed_dim=d_model, num_heads=n_heads,
-            dropout=0.1, batch_first=True,
-        )
-        self.attn_norm  = nn.LayerNorm(d_model)
-        self.pool       = AttentionPooling(d_model)
         self.output_norm = nn.LayerNorm(d_model)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (batch, seq_len, input_dim)
-        x = self.input_projection(x)               # (batch, seq_len, d_model)
+        x = self.input_projection(x)    # (batch, seq_len, d_model)
 
         if self.is_mamba:
             for layer in self.encoder:
                 x = layer(x)
+            out = x[:, -1, :]           # final hidden state: (batch, d_model)
         else:
-            x, _ = self.encoder(x)                 # (batch, seq_len, d_model)
+            # hn: (num_layers*2, batch, d_model//2)
+            _, (hn, _) = self.encoder(x)
+            # hn[-2] = last-layer forward, hn[-1] = last-layer backward
+            out = torch.cat((hn[-2, :, :], hn[-1, :, :]), dim=1)  # (batch, d_model)
 
-        # Self-attention with residual
-        attn_out, _ = self.self_attn(x, x, x)
-        x = self.attn_norm(x + attn_out)           # (batch, seq_len, d_model)
-
-        x = self.pool(x)                           # (batch, d_model)
-        return self.output_norm(x)
+        return self.output_norm(out)
 
 
 # ---------------------------------------------------------------------------
@@ -115,15 +111,22 @@ class SequenceBranch(nn.Module):
 
 class StatBranch(nn.Module):
     """
-    Branch B: Contextual Environment — processes macro flow statistics.
+    Branch B: Contextual Environment — processes macro flow statistics + 5-tuple ports.
 
-    Input:  (batch, input_dim=18)
+    Port embedding: nn.Embedding(65536, 16) per port × 2 ports = 32 dims.
+    Concatenated with the 16 scale-invariant stat features → 48-dim MLP input.
+
+    Input:  stat (batch, input_dim=16),  ports (batch, 2) int64
     Output: (batch, d_model=256)
     """
-    def __init__(self, input_dim: int = 18, d_model: int = 256):
+    _PORT_EMBED_DIM: int = 16
+
+    def __init__(self, input_dim: int = 16, d_model: int = 256):
         super().__init__()
+        self.port_embedding = nn.Embedding(65536, self._PORT_EMBED_DIM)
+        mlp_in = input_dim + 2 * self._PORT_EMBED_DIM   # 16 + 32 = 48
         self.mlp = nn.Sequential(
-            nn.Linear(input_dim, d_model),
+            nn.Linear(mlp_in, d_model),
             nn.LayerNorm(d_model),
             nn.GELU(),
             nn.Dropout(0.1),
@@ -135,7 +138,13 @@ class StatBranch(nn.Module):
             nn.LayerNorm(d_model),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, ports: Optional[torch.Tensor] = None) -> torch.Tensor:
+        if ports is None:
+            ports = torch.zeros(x.shape[0], 2, dtype=torch.long, device=x.device)
+        # ports: (batch, 2) → embed → (batch, 2, 16) → (batch, 32)
+        port_emb = self.port_embedding(ports.clamp(0, 65535))
+        port_emb = port_emb.view(port_emb.shape[0], -1)
+        x = torch.cat([x, port_emb], dim=1)   # (batch, 48)
         return self.mlp(x)
 
 
@@ -211,32 +220,40 @@ class DualBranchEncoder(nn.Module):
 
         fused_dim = d_model * 2  # after cross-attention concat
 
-        # Projection head with residual connection (SimCLR + residual)
-        self.proj1   = nn.Linear(fused_dim, fused_dim)
-        self.proj_bn = nn.BatchNorm1d(fused_dim)
-        self.proj2   = nn.Linear(fused_dim, embed_dim)
+        # Projection head with residual — LayerNorm instead of BatchNorm1d to
+        # prevent intra-batch label leakage during contrastive training.
+        self.proj1    = nn.Linear(fused_dim, fused_dim)
+        self.proj_bn  = nn.LayerNorm(fused_dim)
+        self.proj2    = nn.Linear(fused_dim, embed_dim)
         self.proj_res = nn.Linear(fused_dim, embed_dim)   # residual shortcut
 
-    def forward(self, seq_data: torch.Tensor, stat_data: torch.Tensor) -> torch.Tensor:
-        seq_feat  = self.seq_branch(seq_data)             # (batch, d_model)
-        stat_feat = self.stat_branch(stat_data)           # (batch, d_model)
-        fused     = self.fusion(seq_feat, stat_feat)      # (batch, d_model*2)
+    def forward(
+        self,
+        seq_data: torch.Tensor,
+        stat_data: torch.Tensor,
+        ports_data: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        seq_feat  = self.seq_branch(seq_data)                    # (batch, d_model)
+        stat_feat = self.stat_branch(stat_data, ports_data)      # (batch, d_model)
+        fused     = self.fusion(seq_feat, stat_feat)             # (batch, d_model*2)
 
         # Projection head with residual
-        h = F.gelu(self.proj_bn(self.proj1(fused)))      # (batch, fused_dim)
-        embedding = self.proj2(h) + self.proj_res(fused) # residual skip
+        h = F.gelu(self.proj_bn(self.proj1(fused)))              # (batch, fused_dim)
+        embedding = self.proj2(h) + self.proj_res(fused)         # residual skip
 
-        return F.normalize(embedding, p=2, dim=1)         # (batch, embed_dim)
+        return F.normalize(embedding, p=2, dim=1)                # (batch, embed_dim)
 
 
 if __name__ == "__main__":
-    model = DualBranchEncoder()
+    from src.feature_engineering import STAT_INPUT_DIM
+    model = DualBranchEncoder(stat_input_dim=STAT_INPUT_DIM)
     mamba_str = "Mamba" if HAS_MAMBA else "BiLSTM"
-    print(f"DualBranchEncoder v2 | Sequence encoder: {mamba_str}")
+    print(f"DualBranchEncoder v3 | Sequence encoder: {mamba_str} (final hidden state)")
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Trainable parameters: {n_params:,}")
-    dummy_seq  = torch.randn(8, 30, 3)
-    dummy_stat = torch.randn(8, 18)
-    out = model(dummy_seq, dummy_stat)
-    print(f"Output shape: {out.shape}")           # (8, 256)
+    dummy_seq   = torch.randn(8, 30, 3)
+    dummy_stat  = torch.randn(8, STAT_INPUT_DIM)
+    dummy_ports = torch.randint(0, 65536, (8, 2))
+    out = model(dummy_seq, dummy_stat, dummy_ports)
+    print(f"Output shape: {out.shape}")             # (8, 256)
     print(f"L2 norms (all should be 1.0): {out.norm(dim=1).tolist()[:4]}")

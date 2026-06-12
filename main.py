@@ -14,6 +14,13 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+try:
+    import faiss
+    HAS_FAISS = True
+except ImportError:
+    HAS_FAISS = False
+    logging.getLogger(__name__).warning("faiss not installed — falling back to numpy k-NN eval")
+
 # Silence per-flow data-quality warnings (EMPTY_PHIST, LONG_IPT, ZERO_STD, ...)
 # These fire thousands of times on CESNET and are expected/handled, not errors.
 logging.getLogger("src.feature_engineering").setLevel(logging.ERROR)
@@ -21,6 +28,7 @@ logging.getLogger("src.data_validator").setLevel(logging.ERROR)
 
 from src.models_dual_branch import DualBranchEncoder
 from src.dataset_unified import UnifiedFlowDataset, build_dataloaders, NUM_CLASSES
+from src.feature_engineering import STAT_INPUT_DIM
 from src.train_supcon import (
     MarginBasedSupConLoss,
     EpisodicSampler,
@@ -97,7 +105,7 @@ def train_model(
     # ----------------------------------------------------------------- model
     model = DualBranchEncoder(
         seq_input_dim=3,
-        stat_input_dim=18,
+        stat_input_dim=STAT_INPUT_DIM,
         d_model=256,
         embed_dim=256,
     )
@@ -153,8 +161,9 @@ def train_model(
         model.train()
         total_loss, n_batches = 0.0, 0
 
-        for batch_idx, (seq, stat, labels) in enumerate(train_loader):
-            seq, stat, labels = seq.to(device), stat.to(device), labels.to(device)
+        for batch_idx, (seq, stat, ports, labels) in enumerate(train_loader):
+            seq, stat, ports, labels = (seq.to(device), stat.to(device),
+                                        ports.to(device), labels.to(device))
 
             # Flow augmentation (training only)
             seq, stat = augment_flow(seq, stat, noise_std=0.02, packet_drop_prob=0.05)
@@ -163,7 +172,7 @@ def train_model(
 
             if scaler is not None:
                 with torch.amp.autocast("cuda"):
-                    embeddings = model(seq, stat)
+                    embeddings = model(seq, stat, ports)
                     loss = criterion(embeddings, labels)
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
@@ -171,7 +180,7 @@ def train_model(
                 scaler.step(optimizer)
                 scaler.update()
             else:
-                embeddings = model(seq, stat)
+                embeddings = model(seq, stat, ports)
                 loss = criterion(embeddings, labels)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -189,19 +198,46 @@ def train_model(
         scheduler.step()
         avg_loss = total_loss / max(n_batches, 1)
 
-        # ----------------------------------------- ProtoNet episodic eval
+        # --------------------------------- FAISS k-NN eval (replaces ProtoNet)
         model.eval()
-        eval_accs = []
-        if eval_loader is not None:
+        epoch_acc = 0.0
+        if val_loader is not None:
+            gallery_embs, gallery_labels = [], []
+            query_embs,   query_labels   = [], []
             with torch.no_grad():
-                for seq, stat, _ in eval_loader:
-                    embs     = model(seq.to(device), stat.to(device))
-                    support  = embs[:eval_n_way * k_shot]
-                    query    = embs[eval_n_way * k_shot:]
-                    protos   = compute_prototypes(support, eval_n_way, k_shot)
-                    _, acc   = prototypical_loss(protos, query, eval_n_way, k_query)
-                    eval_accs.append(acc.item())
-        epoch_acc = np.mean(eval_accs) if eval_accs else 0.0
+                for i, batch in enumerate(val_loader):
+                    seq_b, stat_b, ports_b, y_b = batch
+                    emb = model(seq_b.to(device), stat_b.to(device), ports_b.to(device))
+                    emb_np = emb.cpu().numpy()
+                    y_np   = y_b.numpy()
+                    if i % 2 == 0:          # even batches → gallery
+                        gallery_embs.append(emb_np)
+                        gallery_labels.append(y_np)
+                    else:                   # odd batches → query
+                        query_embs.append(emb_np)
+                        query_labels.append(y_np)
+                    if i >= 39:             # cap at 40 batches (10240 samples)
+                        break
+
+            if gallery_embs and query_embs:
+                G = np.concatenate(gallery_embs).astype(np.float32)
+                Q = np.concatenate(query_embs).astype(np.float32)
+                Gy = np.concatenate(gallery_labels)
+                Qy = np.concatenate(query_labels)
+
+                if HAS_FAISS:
+                    index = faiss.IndexFlatIP(G.shape[1])   # inner product = cosine for L2-normed
+                    index.add(G)
+                    _, I = index.search(Q, 5)               # k=5 nearest neighbours
+                else:
+                    # Numpy fallback: full dot-product matrix, top-5 per row
+                    sims = Q @ G.T
+                    I    = np.argsort(-sims, axis=1)[:, :5]
+
+                # Majority vote of k=5 neighbours
+                preds = np.array([np.bincount(Gy[I[j]], minlength=int(Gy.max())+1).argmax()
+                                   for j in range(len(Q))])
+                epoch_acc = float((preds == Qy).mean())
 
         # --------------------------------------- geometric KPI validation
         avg_intra, avg_inter = execute_validation_layer(model, val_loader, device)
