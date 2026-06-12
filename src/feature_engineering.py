@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 SEQ_LEN: int = 30
 SEQ_INPUT_DIM: int = 3
-STAT_INPUT_DIM: int = 18
+STAT_INPUT_DIM: int = 16   # bytes_total and duration_ms removed (shortcut-learning risk)
 
 MAX_PACKET_SIZE: float = 1500.0
 MAX_IPT_MS: float = 5000.0
@@ -331,50 +331,50 @@ def extract_stat_features(row: dict) -> np.ndarray:
 
     if len(raw_ipts) == 0:
         mean_ipt = 0.0
-        std_ipt = 0.0
+        jitter_estimate = 0.0
     else:
         mean_ipt = float(np.mean(raw_ipts))
-        std_ipt = float(np.std(raw_ipts))
-        if std_ipt == 0.0:
+        jitter_estimate = float(np.std(raw_ipts))   # std of IPT ≈ jitter (QoS rubric)
+        if jitter_estimate == 0.0:
             logger.warning("ZERO_STD: feature=ipt")
 
-    # index 5
+    # index 3
     mean_pkt_size_norm = _scalar_size_norm(mean_size)
-    # index 6
+    # index 4
     std_pkt_size_norm = _scalar_size_norm(std_size)
-    # index 7
+    # index 5
     mean_ipt_norm = _scalar_ipt_norm(mean_ipt)
-    # index 8
-    std_ipt_norm = _scalar_ipt_norm(std_ipt)
+    # index 6
+    jitter_norm = _scalar_ipt_norm(jitter_estimate)
 
-    # indices 9–16: PHIST_SRC_SIZES normalized
+    # indices 7–14: PHIST_SRC_SIZES normalized
     phist_src_norm = _normalize_phist_src(np.asarray(phist_raw, dtype=np.float32))
     if np.asarray(phist_raw).sum() == 0:
         logger.warning("EMPTY_PHIST: PHIST_SRC_SIZES sums to zero")
 
-    # index 17
+    # index 15
     ppi_len_norm = min(ppi_len, SEQ_LEN) / float(SEQ_LEN)
 
+    # bytes_total_norm and duration_norm intentionally excluded:
+    # they are volume/time shortcuts that correlate with class size, not class identity.
     stat_data = np.array(
         [
-            bytes_total_norm,       # 0
-            bytes_ratio,            # 1
-            packets_total_norm,     # 2
-            packets_ratio,          # 3
-            duration_norm,          # 4
-            mean_pkt_size_norm,     # 5
-            std_pkt_size_norm,      # 6
-            mean_ipt_norm,          # 7
-            std_ipt_norm,           # 8
-            phist_src_norm[0],      # 9
-            phist_src_norm[1],      # 10
-            phist_src_norm[2],      # 11
-            phist_src_norm[3],      # 12
-            phist_src_norm[4],      # 13
-            phist_src_norm[5],      # 14
-            phist_src_norm[6],      # 15
-            phist_src_norm[7],      # 16
-            ppi_len_norm,           # 17
+            bytes_ratio,            # 0  scale-invariant directional ratio
+            packets_total_norm,     # 1
+            packets_ratio,          # 2
+            mean_pkt_size_norm,     # 3
+            std_pkt_size_norm,      # 4
+            mean_ipt_norm,          # 5
+            jitter_norm,            # 6  QoS jitter estimate
+            phist_src_norm[0],      # 7
+            phist_src_norm[1],      # 8
+            phist_src_norm[2],      # 9
+            phist_src_norm[3],      # 10
+            phist_src_norm[4],      # 11
+            phist_src_norm[5],      # 12
+            phist_src_norm[6],      # 13
+            phist_src_norm[7],      # 14
+            ppi_len_norm,           # 15
         ],
         dtype=np.float32,
     )
@@ -444,39 +444,30 @@ def extract_stat_from_iscxvpn(
 
     if len(raw_ipts) == 0:
         mean_ipt = 0.0
-        std_ipt = 0.0
+        jitter_estimate = 0.0
     else:
         mean_ipt = float(np.mean(raw_ipts))
-        std_ipt = float(np.std(raw_ipts))
-        if std_ipt == 0.0:
+        jitter_estimate = float(np.std(raw_ipts))
+        if jitter_estimate == 0.0:
             logger.warning("ZERO_STD: feature=ipt (ISCXVPN)")
 
-    # index 5
     mean_pkt_size_norm = _scalar_size_norm(mean_size)
-    # index 6
     std_pkt_size_norm = _scalar_size_norm(std_size)
-    # index 7
     mean_ipt_norm = _scalar_ipt_norm(mean_ipt)
-    # index 8
-    std_ipt_norm = _scalar_ipt_norm(std_ipt)
+    jitter_norm = _scalar_ipt_norm(jitter_estimate)
 
-    # indices 9–16: PHIST derived from lengths
     phist_src_norm = compute_phist_from_lengths(lengths)
-
-    # index 17
     ppi_len_norm = min(len(lengths), SEQ_LEN) / float(SEQ_LEN)
 
     stat_data = np.array(
         [
-            bytes_total_norm,
             bytes_ratio,
             packets_total_norm,
             packets_ratio,
-            duration_norm,
             mean_pkt_size_norm,
             std_pkt_size_norm,
             mean_ipt_norm,
-            std_ipt_norm,
+            jitter_norm,
             phist_src_norm[0],
             phist_src_norm[1],
             phist_src_norm[2],
