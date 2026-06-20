@@ -294,8 +294,8 @@ def execute_validation_layer(model: nn.Module, val_loader, device: torch.device)
     for i, batch in enumerate(val_loader):
         if i >= 20:   # 20 batches × 256 = 5120 samples → ~100MB sim matrix vs 9.7GB at 500
             break
-        batch_seq, batch_stat, batch_ports, batch_y = batch
-        embs = model(batch_seq.to(device), batch_stat.to(device), batch_ports.to(device))
+        batch_seq, batch_stat, batch_y = batch
+        embs = model(batch_seq.to(device), batch_stat.to(device))
         all_embeddings.append(embs.cpu())
         all_labels.append(batch_y)
 

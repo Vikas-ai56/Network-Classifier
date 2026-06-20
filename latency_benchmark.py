@@ -15,7 +15,7 @@ from src.models_dual_branch import DualBranchEncoder
 def benchmark(model, device, batch_size: int, n_runs: int = 500) -> float:
     """Returns mean latency in ms for one forward pass of `batch_size` flows."""
     seq  = torch.randn(batch_size, 30, 3, device=device)
-    stat = torch.randn(batch_size, 18,    device=device)
+    stat = torch.randn(batch_size, 16,    device=device)
 
     # Warmup
     for _ in range(50):
@@ -47,7 +47,7 @@ def main():
     if device.type == "cuda":
         print(f"GPU   : {torch.cuda.get_device_name(0)}")
 
-    model = DualBranchEncoder(seq_input_dim=3, stat_input_dim=18, d_model=256, embed_dim=256)
+    model = DualBranchEncoder(seq_input_dim=3, stat_input_dim=16, d_model=256, embed_dim=256)
     ckpt  = torch.load(args.model_path, map_location=device, weights_only=False)
     model.load_state_dict(ckpt["model_state_dict"])
     model.to(device)

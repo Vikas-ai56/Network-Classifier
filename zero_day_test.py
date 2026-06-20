@@ -57,7 +57,7 @@ def main():
     print(f"Device: {device}")
 
     # Load model
-    model = DualBranchEncoder(seq_input_dim=3, stat_input_dim=18, d_model=256, embed_dim=256)
+    model = DualBranchEncoder(seq_input_dim=3, stat_input_dim=16, d_model=256, embed_dim=256)
     ckpt = torch.load(args.model_path, map_location=device, weights_only=False)
     key = "encoder_state_dict" if "encoder_state_dict" in ckpt else "model_state_dict"
     model.load_state_dict(ckpt[key])
