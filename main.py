@@ -161,9 +161,8 @@ def train_model(
         model.train()
         total_loss, n_batches = 0.0, 0
 
-        for batch_idx, (seq, stat, ports, labels) in enumerate(train_loader):
-            seq, stat, ports, labels = (seq.to(device), stat.to(device),
-                                        ports.to(device), labels.to(device))
+        for batch_idx, (seq, stat, labels) in enumerate(train_loader):
+            seq, stat, labels = seq.to(device), stat.to(device), labels.to(device)
 
             # Flow augmentation (training only)
             seq, stat = augment_flow(seq, stat, noise_std=0.02, packet_drop_prob=0.05)
@@ -172,7 +171,7 @@ def train_model(
 
             if scaler is not None:
                 with torch.amp.autocast("cuda"):
-                    embeddings = model(seq, stat, ports)
+                    embeddings = model(seq, stat)
                     loss = criterion(embeddings, labels)
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
@@ -180,7 +179,7 @@ def train_model(
                 scaler.step(optimizer)
                 scaler.update()
             else:
-                embeddings = model(seq, stat, ports)
+                embeddings = model(seq, stat)
                 loss = criterion(embeddings, labels)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -206,8 +205,8 @@ def train_model(
             query_embs,   query_labels   = [], []
             with torch.no_grad():
                 for i, batch in enumerate(val_loader):
-                    seq_b, stat_b, ports_b, y_b = batch
-                    emb = model(seq_b.to(device), stat_b.to(device), ports_b.to(device))
+                    seq_b, stat_b, y_b = batch
+                    emb = model(seq_b.to(device), stat_b.to(device))
                     emb_np = emb.cpu().numpy()
                     y_np   = y_b.numpy()
                     if i % 2 == 0:          # even batches → gallery

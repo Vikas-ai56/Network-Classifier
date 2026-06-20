@@ -76,7 +76,7 @@ def _parse_ppi(raw) -> Optional[list]:
 _ZERO_DAY_CLASSES: frozenset = frozenset({1, 2})
 
 
-def _process_chunk(df, app_int_map=None, split: str = "train") -> List[Tuple[np.ndarray, np.ndarray, np.ndarray, int]]:
+def _process_chunk(df, app_int_map=None, split: str = "train") -> List[Tuple[np.ndarray, np.ndarray, int]]:
     samples, rejected = [], 0
 
     for _, row in df.iterrows():
@@ -144,12 +144,9 @@ def _process_chunk(df, app_int_map=None, split: str = "train") -> List[Tuple[np.
             rejected += 1
             continue
 
-        # Extract 5-tuple ports (fallback to 0 if column absent)
-        src_port = int(row.get("SRC_PORT", row.get("SOURCE_PORT", 0)))
-        dst_port = int(row.get("DST_PORT", row.get("DESTINATION_PORT", 0)))
-        ports_data = np.array([src_port, dst_port], dtype=np.int64)
-
-        samples.append((seq_data, stat_data, ports_data, unified_label))
+        # 5-tuple identity (ports/IPs) intentionally NOT used as a feature —
+        # it is a shortcut that breaks zero-day generalization.
+        samples.append((seq_data, stat_data, unified_label))
 
     if rejected:
         logger.debug("Chunk: %d valid, %d rejected", len(samples), rejected)
@@ -210,17 +207,16 @@ class CESNETStreamingDataset(IterableDataset):
             start = i * self.chunk_size
             yield source.iloc[start: start + self.chunk_size]
 
-    def __iter__(self) -> Iterator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+    def __iter__(self) -> Iterator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         # num_workers=0 only: stream chunks lazily without materialising all of them.
         for chunk in self._iter_raw_chunks():
             samples = _process_chunk(chunk, self._app_int_map, split=self.split)
             if self.shuffle_chunks:
                 random.shuffle(samples)
-            for seq_data, stat_data, ports_data, label in samples:
+            for seq_data, stat_data, label in samples:
                 yield (
                     torch.from_numpy(seq_data),
                     torch.from_numpy(stat_data),
-                    torch.from_numpy(ports_data),
                     torch.tensor(label, dtype=torch.long),
                 )
 

@@ -45,7 +45,7 @@ def main():
     print(f"Device: {device}")
 
     # Load encoder (fine-tuned, not frozen)
-    encoder = DualBranchEncoder(seq_input_dim=3, stat_input_dim=18, d_model=256, embed_dim=256)
+    encoder = DualBranchEncoder(seq_input_dim=3, stat_input_dim=16, d_model=256, embed_dim=256)
     ckpt = torch.load(args.model_path, map_location=device, weights_only=False)
     encoder.load_state_dict(ckpt["model_state_dict"])
     encoder.to(device)

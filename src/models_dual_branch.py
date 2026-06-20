@@ -111,22 +111,22 @@ class SequenceBranch(nn.Module):
 
 class StatBranch(nn.Module):
     """
-    Branch B: Contextual Environment — processes macro flow statistics + 5-tuple ports.
+    Branch B: Contextual Environment — processes macro flow statistics.
 
-    Port embedding: nn.Embedding(65536, 16) per port × 2 ports = 32 dims.
-    Concatenated with the 16 scale-invariant stat features → 48-dim MLP input.
+    Uses ONLY behavioral statistics (ratios, packet-size/IPT moments, size
+    histogram, PPI length). The 5-tuple identity (ports/IPs) is deliberately
+    excluded: ports are a shortcut/leakage feature that memorize servers rather
+    than learn traffic behavior, which breaks zero-day generalization. For QUIC
+    they also carry almost no signal (dst port ≈ 443, src port ephemeral).
 
-    Input:  stat (batch, input_dim=16),  ports (batch, 2) int64
+    Input:  stat (batch, input_dim=16)
     Output: (batch, d_model=256)
     """
-    _PORT_EMBED_DIM: int = 16
 
     def __init__(self, input_dim: int = 16, d_model: int = 256):
         super().__init__()
-        self.port_embedding = nn.Embedding(65536, self._PORT_EMBED_DIM)
-        mlp_in = input_dim + 2 * self._PORT_EMBED_DIM   # 16 + 32 = 48
         self.mlp = nn.Sequential(
-            nn.Linear(mlp_in, d_model),
+            nn.Linear(input_dim, d_model),
             nn.LayerNorm(d_model),
             nn.GELU(),
             nn.Dropout(0.1),
@@ -138,13 +138,7 @@ class StatBranch(nn.Module):
             nn.LayerNorm(d_model),
         )
 
-    def forward(self, x: torch.Tensor, ports: Optional[torch.Tensor] = None) -> torch.Tensor:
-        if ports is None:
-            ports = torch.zeros(x.shape[0], 2, dtype=torch.long, device=x.device)
-        # ports: (batch, 2) → embed → (batch, 2, 16) → (batch, 32)
-        port_emb = self.port_embedding(ports.clamp(0, 65535))
-        port_emb = port_emb.view(port_emb.shape[0], -1)
-        x = torch.cat([x, port_emb], dim=1)   # (batch, 48)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.mlp(x)
 
 
@@ -206,7 +200,7 @@ class DualBranchEncoder(nn.Module):
     def __init__(
         self,
         seq_input_dim: int = 3,
-        stat_input_dim: int = 18,
+        stat_input_dim: int = 16,
         d_model: int = 256,
         embed_dim: int = 256,
         n_seq_layers: int = 2,
@@ -231,10 +225,9 @@ class DualBranchEncoder(nn.Module):
         self,
         seq_data: torch.Tensor,
         stat_data: torch.Tensor,
-        ports_data: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         seq_feat  = self.seq_branch(seq_data)                    # (batch, d_model)
-        stat_feat = self.stat_branch(stat_data, ports_data)      # (batch, d_model)
+        stat_feat = self.stat_branch(stat_data)                  # (batch, d_model)
         fused     = self.fusion(seq_feat, stat_feat)             # (batch, d_model*2)
 
         # Projection head with residual
@@ -253,7 +246,6 @@ if __name__ == "__main__":
     print(f"Trainable parameters: {n_params:,}")
     dummy_seq   = torch.randn(8, 30, 3)
     dummy_stat  = torch.randn(8, STAT_INPUT_DIM)
-    dummy_ports = torch.randint(0, 65536, (8, 2))
-    out = model(dummy_seq, dummy_stat, dummy_ports)
+    out = model(dummy_seq, dummy_stat)
     print(f"Output shape: {out.shape}")             # (8, 256)
     print(f"L2 norms (all should be 1.0): {out.norm(dim=1).tolist()[:4]}")
