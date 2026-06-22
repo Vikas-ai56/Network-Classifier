@@ -117,5 +117,20 @@ train/val/test splits, optional class-balanced `WeightedRandomSampler`, and the 
 - Fixed seeds are used in evaluation splits (`random_state=42`) for repeatable KPI numbers.
 - Trained model: ~1.98 M parameters, ~8 MB checkpoint.
 
-<!-- SCREENSHOT: terminal showing `=== Training complete === Best ProtoNet accuracy : 0.9270` -->
-<!-- SCREENSHOT: phist_visualization.png (packet-size histogram feature) -->
+## Packet-Size Histogram Feature (PHIST)
+
+The 8-bin source-packet-size histogram is one of the most discriminative Branch B features.
+Below is a visualization of the per-class PHIST distributions on CESNET-QUIC22:
+
+![PHIST feature visualization](../assets/phist_visualization.png)
+
+*Figure: Packet-size histogram distributions by application class. Streaming traffic
+(large, uniform packets) looks distinctly different from gaming traffic (small, bursty)
+and VoIP (fixed-size, regular). This is the behavioral fingerprint the model learns.*
+
+**Training completion output:**
+```
+--- Epoch 35 | Loss: 0.0437 | ProtoNet: 0.9270 ✓ | Intra: 0.7283 | Inter: 0.3833 ✗ ---
+=== Training complete ===
+Best ProtoNet accuracy : 0.9270  (✓ ≥90% KPI MET)
+```

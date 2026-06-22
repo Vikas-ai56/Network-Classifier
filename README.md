@@ -1,119 +1,100 @@
-# Next-Generation Encrypted Network Traffic Classifier
+# QoS-Aware Encrypted Network Traffic Classifier
 
-## 📘 Full Codebase Documentation
-
-For end-to-end repository architecture, entrypoints, folder responsibilities, flow mapping, and architecture change guidance, see:
-
-- [docs/README.md](docs/README.md)
-- [docs/ARCHITECTURE_CHANGE_CHECKLIST.md](docs/ARCHITECTURE_CHANGE_CHECKLIST.md)
-
-Welcome to the core repository for our Hackathon Project! This repository contains a state-of-the-art deep learning architecture designed to classify encrypted network traffic in real-time. It focuses specifically on **Zero-Day Generalization**—the ability to accurately identify traffic types the model has never been explicitly trained on.
-
----
-
-## 🚀 The Architecture in Detail
-
-Traditional Deep Packet Inspection (DPI) fails entirely on encrypted traffic (like HTTPS or VPNs), and standard sequence models (like Transformers) suffer from quadratic complexity, making them too slow for real-time, packet-by-packet network analysis. 
-
-Our solution is a **Hybrid Dual-Branch Encoder**:
-
-### 1. Branch A: The Temporal Sequence Branch
-Network traffic is a conversation over time. This branch processes the chronological sequence of the first 128 packets in a flow. 
-* **Input Features:** `[Packet Size, Inter-Arrival Time (IAT)]`. We explicitly exclude IP addresses (the "5-tuple trap") so the model learns behavioral fingerprints, not routing topologies.
-* **The Engine:** We utilize a **Mamba State Space Model (SSM)**. Mamba processes sequences in linear time $O(N)$, making it blazingly fast compared to Transformers. 
-* *Fallback Strategy:* If deployed on a machine without CUDA/Mamba support, the architecture automatically falls back to a 2-layer Bidirectional LSTM.
-
-### 2. Branch B: The Statistical Branch
-Static metadata cannot be fed into a sequence model without causing gradient distortion.
-* **Input Features:** Flow-level QoS scalars extracted at the end of the flow, such as `Total Bytes`, `Packet Rate`, `TCP RTT`, and `UDP Jitter`.
-* **The Engine:** A standard Multi-Layer Perceptron (MLP) with ReLU activations and Dropout layers.
-
-### 3. The Brain (Fusion & Projection)
-The high-dimensional outputs from Branch A and Branch B are concatenated. They are then passed through a final MLP Projection Head to generate one unified, 128-dimensional **"Context-Aware Embedding"**. This single vector represents the entire "personality" of the network flow.
+- **Problem Statement Number** - 
+- **Problem Statement Title** - *(Must exactly match one of the 11 Samsung EnnovateX AX Hackathon Problem Statements)*
+- **Team name** - THETA
+- **Team members (Names)** - *Member 1 Name*, *Member 2 Name*
+- **Institute/College Name** - *Name, Campus Name & Address*
+- **Final Presentation Google Drive Link** - *Add link here (PDF, openly accessible, no login wall)*
+- **Full Submission Demo Video Link** - *Add YouTube link here (public or unlisted)*
+- **Setup & Result Reproducibility Video Link** - *Add YouTube link here (public or unlisted)*
 
 ---
 
-## 🧠 Training Strategy: SupCon + ProtoNet
+### Project Artefacts
 
-We do not use standard Softmax classification, because it fails on zero-day traffic. Instead, we use:
+- **Technical Documentation** - Available in the [`docs/`](docs/) folder:
+  - [docs/TECHNICAL_STACK.md](docs/TECHNICAL_STACK.md) — Languages, frameworks, hardware, runtime
+  - [docs/OSS_LIBRARIES.md](docs/OSS_LIBRARIES.md) — All OSS libraries with links and licenses
+  - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — End-to-end architecture, data flow, model design, loss, evaluation
+  - [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) — File-by-file details, feature engineering, key design decisions
+  - [docs/INSTALLATION.md](docs/INSTALLATION.md) — Setup on local machine + cloud GPU (vast.ai), troubleshooting
+  - [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — Train, evaluate all KPIs, benchmark; full command reference
+  - [docs/FEATURES.md](docs/FEATURES.md) — Salient features, novelty, KPI results table
+  - [docs/MODELS_AND_DATASETS.md](docs/MODELS_AND_DATASETS.md) — Models and datasets used/published, licenses, HF links
 
-* **Phase 1: Supervised Contrastive Learning (SupCon)**
-  During pre-training, the model acts as a "Teacher." It uses `SupConLoss` to mathematically pull embeddings of the same traffic application (e.g., two different Skype calls) close together in the latent space, while forcefully pushing different applications (e.g., Skype vs. FTP) far apart.
-  
-* **Phase 2: Prototypical Networks (Zero-Day Evaluation)**
-  During evaluation, we use **Episodic Sampling (N-way, K-shot)**. We pick 5 random classes and give the model 5 examples of each to compute a "Prototype" (the geometric center point of that class). We then give it 15 unseen flows and ask it to classify them based strictly on Euclidean distance to the prototypes. This is what enables zero-day detection!
+- **[Important]** [`docs/ax.md`](docs/ax.md) — Full retrospective on how open-weight models and agentic AI tools (Claude Code, Mamba SSM, tool chaining, memory, subagents) were used to build this solution, including what worked and what did not.
 
----
+- **Source Code** - All source code is in [`src/`](src/) and root-level scripts:
 
-## 📂 File-by-File Breakdown
+  | File | Purpose |
+  |---|---|
+  | `main.py` | Training entrypoint — streams CESNET-QUIC22, trains encoder, evaluates per epoch |
+  | `eval_cesnet.py` | Full KPI evaluation on CESNET-QUIC22 validation split |
+  | `classify_knn_svm.py` | Classification KPI: k-NN + SVM + Logistic Regression |
+  | `zero_day_test.py` | Zero-day generalization KPI: balanced k-shot k-NN |
+  | `latency_benchmark.py` | Latency KPI: single-flow forward pass, mean + p99 |
+  | `finetune_classifier.py` | Optional supervised fine-tune head on encoder |
+  | `src/models_dual_branch.py` | `DualBranchEncoder`, `SequenceBranch`, `StatBranch`, `CrossAttentionFusion` |
+  | `src/feature_engineering.py` | Stateless feature extraction and normalization |
+  | `src/streaming_dataset.py` | CESNET-QUIC22 streaming `IterableDataset` |
+  | `src/dataset_unified.py` | Map-style loader for CESNET / ISCXVPN2016 / 5G CSV |
+  | `src/data_validator.py` | Flow quality gates (`FlowValidator`) |
+  | `src/train_supcon.py` | `MarginBasedSupConLoss`, `HardNegativeMarginLoss`, `EpisodicSampler` |
+  | `src/nfstream_extractor.py` | PCAP → flow features via NFStream (live-capture path) |
 
-### `main.py` (The Orchestrator)
-This is the entry point of the application. When you run `python3 main.py`, it performs the following:
-1. Initializes the `NetMambaDataset` to load the offline traffic data.
-2. Initializes the `DualBranchEncoder` model and the `AdamW` optimizer.
-3. Runs the **SupCon Pre-training Loop** (updating model weights).
-4. Pauses at the end of every epoch to run the **Prototypical Zero-Day Evaluation**.
-5. Automatically saves the weights to `model/best_model.pth` whenever it hits a new high score in zero-day accuracy.
+- **Models Used** — The `DualBranchEncoder` is trained **from scratch** on CESNET-QUIC22. No pretrained HuggingFace model weights are used. The open-weight **architectures and libraries** used are:
+  - **Mamba SSM** (`mamba-ssm`, Apache-2.0) — sequence encoder backbone → https://github.com/state-spaces/mamba
+  - **NetMamba** (reference architecture for traffic encoding) → https://github.com/wangtz19/NetMamba
+  - **SupContrast** (BSD-2-Clause, loss methodology basis) → https://github.com/HobbitLong/SupContrast
 
-### `src/models_dual_branch.py` (The Architecture)
-Contains the PyTorch classes that build the neural network:
-* `SequenceBranch`: Implements the Mamba (or fallback LSTM) logic. It takes the `(Batch, 128, 2)` sequence tensor and applies Global Average Pooling.
-* `StatBranch`: Implements the MLP for the `(Batch, 4)` static scalar tensor.
-* `DualBranchEncoder`: The parent class that initializes both branches, merges their outputs, and applies the L2-normalized Projection Head.
+- **Models Published** — The trained **DualBranchEncoder** checkpoint (~1.98 M parameters, ~8 MB) developed as part of this solution is to be published on HuggingFace under **Apache-2.0** license.
+  - HuggingFace link: *<!-- TODO: https://huggingface.co/\<username\>/dualbranch-quic-encoder — upload instructions in docs/MODELS_AND_DATASETS.md -->*
 
-### `src/train_supcon.py` (The Math & Logic)
-Contains the custom loss functions and samplers crucial for this project:
-* `SupConLoss`: Calculates the contrastive loss using temperature-scaled dot products. 
-* `EpisodicSampler`: Groups data into N-way, K-shot episodes instead of standard randomized batches.
-* `compute_prototypes` & `prototypical_loss`: Calculates the geometric centers of traffic classes and classifies new traffic based on distance.
+- **Datasets Used**
+  - **CESNET-QUIC22** — ~10 M+ real QUIC flows from the CESNET ISP backbone; per-packet info, flow stats, 7 application categories. Primary training and evaluation dataset. Accessed via `cesnet-datazoo` (no manual download required). License: **Creative Commons**. → https://github.com/CESNET/cesnet-datazoo · DOI: https://doi.org/10.1016/j.dib.2023.108888
+  - **ISCXVPN2016** — VPN / non-VPN encrypted traffic captures; used for reference and cross-dataset checks only. License: Academic/research (UNB). → https://www.unb.ca/cic/datasets/vpn.html
 
-### `src/dataset_netmamba.py` (The Data Loader)
-A custom PyTorch `Dataset` class designed to parse the offline ISCXVPN2016 dataset.
-* It crawls the directory structure to find `.json` files, extracts lengths and intervals, and pads/truncates to exactly 128 packets.
-
-### `src/nfstream_extractor.py` (The Real-World Extractor)
-While `dataset_netmamba.py` is for offline JSONs, this script is for **production deployment**.
-* Uses the `nfstream` library to ingest raw `.pcap` files or live network interfaces.
-* Applies the critical guardrail of setting `splt_analysis=128` to extract the first 128 packets without IP addresses.
-
-### `assets/` (Visual Documentation)
-This folder contains architectural diagrams and visual aids (like `NetMamba.png`). These are useful for understanding the flow of the Mamba blocks and should be used when presenting the project.
-
-### `requirements.txt` (Environment Dependencies)
-This file lists all the Python dependencies required to run the original Mamba codebase. 
-* **Key Dependencies:** `torch`, `torchvision`, `scikit-learn`, `pandas`.
-* **Important Note:** You will also need to manually `pip install nfstream` to use the `nfstream_extractor.py` for live traffic.
+- **Datasets Published** — No new dataset was created or published for this project. Training uses the publicly available CESNET-QUIC22 under its Creative Commons license. Derived feature tensors are computed on the fly and not stored or redistributed.
+  - Published dataset link: *N/A*
 
 ---
 
-## 🏆 Project Status: Achieved vs. Not Achieved
+#### Final Presentation
 
-### ✅ What We Have Achieved So Far
-1. **Built the Custom Architecture:** The entire Dual-Branch Mamba + MLP model is fully coded and functional with dynamic fallback support.
-2. **Built the Data Pipeline:** The extraction logic successfully converts traffic into behavior sequences without data leakage (no IP addresses).
-3. **Implemented Zero-Day Logic:** SupCon Loss and ProtoNet Evaluation are fully integrated.
-4. **Successful Proof-of-Concept:** We trained the model on the ISCXVPN2016 benchmark dataset for 5 epochs. **Result:** It achieved **43.8% Zero-Day (Few-Shot) Accuracy**. Since random guessing for 5 classes is 20%, we have proven the model successfully learns behavioral fingerprints and is over 2x better than random on unseen data!
+*Upload the PDF presentation to Google Drive (openly accessible, no login wall) and add the link above.*
 
-### 🚧 What is NOT Achieved (Next Steps for the Team)
-**If you are picking up this project, here is what you need to work on next:**
-
-1. **Activate the Mamba Engine (Hardware Requirement):** 
-   * *Status:* The model is currently running on the **LSTM Fallback** because it was developed on a Mac. 
-   * *Task:* Move this codebase to a Linux machine with an NVIDIA GPU. Run `pip install mamba-ssm`. The code will automatically detect it and switch to the ultra-fast linear Mamba engine.
-2. **CESNET-QUIC22 Generalization Test:**
-   * *Status:* We proved the concept on ISCXVPN2016, but the hackathon requires testing on CESNET-QUIC22 (a massive 153M flow dataset).
-   * *Task:* Use the `cesnet-datazoo` library to download the QUIC dataset, train the model on it, and hit the >85% accuracy KPI.
-3. **Build `inference.py` (The Production App):**
-   * *Status:* We have the extractor (`nfstream_extractor.py`) and the trained model (`model/best_model.pth`), but they aren't tied together for a live demo.
-   * *Task:* Write a script that takes a live `.pcap` capture, runs it through `NFStreamExtractor`, feeds it to the `DualBranchEncoder`, and prints the traffic classification to the terminal in real-time.
+The presentation should cover: problem statement, solution innovation and novelty, architecture overview, open datasets/models used and developed, KPI results, agentic AI development approach, and final deliverable details.
 
 ---
 
-## 💻 How to Run
+#### Full Submission Demo Video
 
-1. Ensure your offline dataset is unzipped into the `dataset/netmamba/ISCXVPN2016/images_sampled_new` directory. *(Note: The `dataset/` and `model/` folders are ignored in `.gitignore` due to their massive size).*
-2. Run the main engine from the root of the project:
+*Upload to YouTube (public or unlisted) and add the link above.*
 
-```bash
-python3 main.py
-```
+The demo video should show the solution working end-to-end in real life — traffic capture, classification output, and how it addresses the problem statement.
+
+---
+
+#### Setup & Result Reproducibility Video
+
+*Upload to YouTube (public or unlisted) and add the link above.*
+
+The reproducibility video must demonstrate:
+
+1. Step-by-step project installation (clone repo, create venv, install dependencies)
+2. Data download steps (`cesnet-datazoo` first-run metadata download)
+3. Model training: `python main.py --streaming --streaming_size XS`
+4. Evaluation to reproduce all KPIs: `python eval_cesnet.py --model_path model/best_model.pth --n_samples 5000`
+
+---
+
+### Attribution
+
+This project builds on the following open-source projects:
+
+| Project | Original Link | New features developed |
+|---|---|---|
+| **NetMamba** | https://github.com/wangtz19/NetMamba | Replaced image-based encoding with behavioral flow feature vectors; added dual-branch cross-attention fusion; added CESNET-QUIC22 streaming pipeline; added contrastive metric-learning training with `MarginBasedSupConLoss`; added zero-day evaluation protocol |
+| **Mamba SSM** | https://github.com/state-spaces/mamba | Integrated as the sequence encoder backend with automatic BiLSTM fallback for non-CUDA environments |
+| **SupContrast** | https://github.com/HobbitLong/SupContrast | Adapted into `MarginBasedSupConLoss` with KPI-matched margins (0.7 / 0.3) and extended with `HardNegativeMarginLoss` for hard-negative mining |

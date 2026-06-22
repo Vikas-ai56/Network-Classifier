@@ -133,5 +133,10 @@ Classes **music/audio (1)** and **gaming (2)** are filtered out of the *training
 zero-day metric a genuine test of generalization to categories the encoder never saw
 during training — not just few-shot performance on familiar classes.
 
-<!-- SCREENSHOT: architecture diagram (can replace the ASCII flow above with a rendered figure) -->
-<!-- SCREENSHOT: assets/NetMamba.png or a custom architecture render -->
+## Architecture Diagram
+
+![Mamba block architecture](../assets/NetMamba.png)
+
+*Figure: Mamba SSM block structure — the engine powering Branch A's temporal encoder.
+The selective state-space mechanism processes the 30-packet sequence in O(N) time,
+avoiding the O(N²) cost of attention-based Transformers.*
