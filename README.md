@@ -7,7 +7,7 @@
 - **Institute/College Name** - *Name, Campus Name & Address*
 - **Final Presentation Google Drive Link** - *Add link here (PDF, openly accessible, no login wall)*
 - **Full Submission Demo Video Link** - *Add YouTube link here (public or unlisted)*
-- **Setup & Result Reproducibility Video Link** - *Add YouTube link here (public or unlisted)*
+- **Setup & Result Reproducibility Video Link** - https://youtu.be/NZxv-P8X8Ss
 
 ---
 
