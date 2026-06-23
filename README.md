@@ -5,6 +5,7 @@
 - **Team name** - THETA
 - **Team members (Names)** - K Vikas, Dhruv Singhal
 - **Institute/College Name** - R V College of Engineering, Bengaluru, Karnataka
+- **Hugging Face Mode** - https://huggingface.co/dhruvsinghal1387/dualbranch-quic-encoder
 - **Final Presentation Google Drive Link** - https://drive.google.com/drive/folders/1JLqSfcOGjeKQsiLomRr8SEDWZJ2hRqAJ?usp=drive_link
 - **Full Submission Demo Video Link** - https://youtu.be/NZxv-P8X8Ss?si=-IK8p4lCTO_uWs8L
 - **Setup & Result Reproducibility Video Link** - https://youtu.be/SlJP2cqzuV0?feature=shared
