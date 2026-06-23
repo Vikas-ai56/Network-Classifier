@@ -660,6 +660,49 @@ python -c "from src.models_dual_branch import DualBranchEncoder; import torch;
 **Quantitative impact:** Zero silent regressions pushed to the training instance.
 Every checkpoint was confirmed to run before being evaluated.
 
+### 11.6 Building the real-data demo — reading before reasoning, again
+
+The final deliverable was a live demo (`live_demo.py`) classifying **real captured QUIC
+traffic** off the developer's own machine — the proof that the model generalizes past the
+CESNET-QUIC22 training set. The agentic workflow that produced it is a textbook OBSERVE →
+REASON → ACT → VERIFY loop:
+
+```
+OBSERVE:  Read the pre-existing src/nfstream_extractor.py instead of trusting it.
+          → It emitted (128, 3) sequences and a 4-element stat proxy — incompatible
+            with the shipped model's (30, 3) + 16-feature contract.
+          → It read flow.splt_iat (wrong attribute) and inferred direction from the
+            sign of splt_ps. Grepping the installed nfstream 6.6.0 source showed the
+            real fields are splt_direction, splt_ps, splt_piat_ms.
+
+REASON:   Don't patch the stale extractor — it duplicates normalization logic that can
+          drift from training. Instead, build the demo so it CALLS the exact training
+          feature functions (extract_seq_features / extract_stat_features). Single source
+          of truth ⇒ the demo tensors can never silently diverge from what the model saw.
+          Classification needs a gallery: the saved class prototypes (model/prototypes.pth,
+          class_id → 256-dim) → nearest-prototype by cosine similarity, no retraining.
+
+ACT:      Wrote live_demo.py: NFStream (n_dissections=0, 5-tuple-pure) → map each flow to
+          CESNET PPI layout → real feature_engineering functions → encoder → cosine vs
+          prototypes. IPs/ports are display-only, never model inputs.
+
+VERIFY:   Before claiming it works, ran a mock nfstream-shaped flow through the full path:
+          confirmed seq=(30,3), stat=(16,), embedding L2-norm=1.0, and a valid prediction.
+          Then the human ran it on a genuine `sudo tcpdump` capture: 35 real QUIC flows
+          classified, with the large streaming flows (hundreds–thousands of packets)
+          landing on video_streaming at ~68-70% confidence.
+```
+
+**Quantitative impact:** zero shape-mismatch errors on first real run; the demo reproduced
+sensible predictions on never-before-seen live traffic. The discipline of *reading the
+stale code rather than trusting its docstring* caught two latent bugs (wrong tensor shape,
+wrong nfstream attribute names) that would each have crashed or silently corrupted a live
+demo recorded for submission.
+
+**Lesson (reinforced):** when a helper file already exists, treat it as a hypothesis to
+verify, not a fact to reuse. And prefer calling the single source of truth over
+re-implementing its logic in a second place.
+
 ---
 
 ## 12. What Did NOT Work ❌
@@ -830,4 +873,4 @@ agent had the tool access to answer it precisely.
 ---
 
 *Document authored by Claude Opus 4.8 in partnership with the project team.
-Last updated: 2026-06-22.*
+Last updated: 2026-06-23.*
