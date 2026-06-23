@@ -1,12 +1,13 @@
 # QoS-Aware Encrypted Network Traffic Classifier
 
 - **Problem Statement Number** - 2
-- **Problem Statement Title** -Context-Aware Flow Embeddings for Adaptive AI based Network Traffic Classificat>
+- **Problem Statement Title** - Context-Aware Flow Embeddings for Adaptive AI based Network Traffic Classification
 - **Team name** - THETA
-- **Team members (Names)** - *K Vikas*, *Dhruv Singhal*
-- **Institute/College Name** - *RV College of Engineering, Bengalurur, Karnatak>
-- **Full Submission Demo Video Link** - *Add YouTube link here (public or unlis>
-- **Setup & Result Reproducibility Video Link** - *Add YouTube link here (publi>
+- **Team members (Names)** - K Vikas, Dhruv Singhal
+- **Institute/College Name** - R V College of Engineering, Bengaluru, Karnataka
+- **Final Presentation Google Drive Link** - *Add link here (PDF, openly accessible, no login wall)*
+- **Full Submission Demo Video Link** - *Add YouTube link here (public or unlisted)*
+- **Setup & Result Reproducibility Video Link** - https://youtu.be/NZxv-P8X8Ss
 
 ---
 
