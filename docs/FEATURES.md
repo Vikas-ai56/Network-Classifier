@@ -67,4 +67,3 @@ trailing batches) that silently corrupt training.
 the already-implemented `HardNegativeMarginLoss` (hard-negative mining + tighter negative
 margin) in a follow-up run.
 
-<!-- SCREENSHOT: embedding visualization (t-SNE/UMAP of the 256-d embeddings colored by class) -->

@@ -5,9 +5,9 @@
 - **Team name** - THETA
 - **Team members (Names)** - K Vikas, Dhruv Singhal
 - **Institute/College Name** - R V College of Engineering, Bengaluru, Karnataka
-- **Final Presentation Google Drive Link** - *Add link here (PDF, openly accessible, no login wall)*
-- **Full Submission Demo Video Link** - *Add YouTube link here (public or unlisted)*
-- **Setup & Result Reproducibility Video Link** - https://youtu.be/NZxv-P8X8Ss
+- **Final Presentation Google Drive Link** - https://drive.google.com/drive/folders/1JLqSfcOGjeKQsiLomRr8SEDWZJ2hRqAJ?usp=drive_link
+- **Full Submission Demo Video Link** - *Coming soon*
+- **Setup & Result Reproducibility Video Link** - https://youtu.be/SlJP2cqzuV0?feature=shared
 
 ---
 
@@ -62,25 +62,25 @@
 
 #### Final Presentation
 
-*Upload the PDF presentation to Google Drive (openly accessible, no login wall) and add the link above.*
+**Slides:** [Samsung EnnovateX — Team THETA (Google Drive)](https://drive.google.com/drive/folders/1JLqSfcOGjeKQsiLomRr8SEDWZJ2hRqAJ?usp=drive_link)
 
-The presentation should cover: problem statement, solution innovation and novelty, architecture overview, open datasets/models used and developed, KPI results, agentic AI development approach, and final deliverable details.
+The presentation covers: problem statement, solution innovation and novelty, architecture overview, open datasets/models used and developed, KPI results, agentic AI development approach, and final deliverable details.
 
 ---
 
 #### Full Submission Demo Video
 
-*Upload to YouTube (public or unlisted) and add the link above.*
+*Coming soon.*
 
-The demo video should show the solution working end-to-end in real life — traffic capture, classification output, and how it addresses the problem statement.
+The demo video will show the solution working end-to-end — traffic capture, classification output, and how it addresses the problem statement.
 
 ---
 
 #### Setup & Result Reproducibility Video
 
-*Upload to YouTube (public or unlisted) and add the link above.*
+**Video:** https://youtu.be/SlJP2cqzuV0?feature=shared
 
-The reproducibility video must demonstrate:
+The reproducibility video demonstrates:
 
 1. Step-by-step project installation (clone repo, create venv, install dependencies)
 2. Data download steps (`cesnet-datazoo` first-run metadata download)

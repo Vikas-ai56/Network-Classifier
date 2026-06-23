@@ -41,4 +41,3 @@ Trained and evaluated on **CESNET-QUIC22** (`XS` streaming split) on an RTX 4090
 
 **3 / 5 KPIs met.** Full breakdown in [../KPI_RESULTS.md](../KPI_RESULTS.md).
 
-<!-- SCREENSHOT: KPI summary terminal output from `python eval_cesnet.py` -->
