@@ -6,7 +6,7 @@
 - **Team members (Names)** - K Vikas, Dhruv Singhal
 - **Institute/College Name** - R V College of Engineering, Bengaluru, Karnataka
 - **Final Presentation Google Drive Link** - https://drive.google.com/drive/folders/1JLqSfcOGjeKQsiLomRr8SEDWZJ2hRqAJ?usp=drive_link
-- **Full Submission Demo Video Link** - *Coming soon*
+- **Full Submission Demo Video Link** - https://youtu.be/NZxv-P8X8Ss?si=-IK8p4lCTO_uWs8L
 - **Setup & Result Reproducibility Video Link** - https://youtu.be/SlJP2cqzuV0?feature=shared
 
 ---
@@ -70,9 +70,7 @@ The presentation covers: problem statement, solution innovation and novelty, arc
 
 #### Full Submission Demo Video
 
-*Coming soon.*
-
-The demo video will show the solution working end-to-end — traffic capture, classification output, and how it addresses the problem statement.
+*https://youtu.be/NZxv-P8X8Ss?si=-IK8p4lCTO_uWs8L*
 
 ---
 
