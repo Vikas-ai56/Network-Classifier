@@ -48,8 +48,8 @@
   - **NetMamba** (reference architecture for traffic encoding) → https://github.com/wangtz19/NetMamba
   - **SupContrast** (BSD-2-Clause, loss methodology basis) → https://github.com/HobbitLong/SupContrast
 
-- **Models Published** — The trained **DualBranchEncoder** checkpoint (~1.98 M parameters, ~8 MB) developed as part of this solution is to be published on HuggingFace under **Apache-2.0** license.
-  - HuggingFace link: *<!-- TODO: https://huggingface.co/\<username\>/dualbranch-quic-encoder — upload instructions in docs/MODELS_AND_DATASETS.md -->*
+- **Models Published** — The trained **DualBranchEncoder** checkpoint (~1.98 M parameters) developed as part of this solution is published on HuggingFace under the **Apache-2.0** license (`best_model.pth` + `prototypes.pth` + model card).
+  - HuggingFace link: **https://huggingface.co/dhruvsinghal1387/dualbranch-quic-encoder**
 
 - **Datasets Used**
   - **CESNET-QUIC22** — ~10 M+ real QUIC flows from the CESNET ISP backbone; per-packet info, flow stats, 7 application categories. Primary training and evaluation dataset. Accessed via `cesnet-datazoo` (no manual download required). License: **Creative Commons**. → https://github.com/CESNET/cesnet-datazoo · DOI: https://doi.org/10.1016/j.dib.2023.108888

@@ -21,31 +21,38 @@ weights):
 
 ## Models Published
 
-We developed the **DualBranchEncoder** as our solution. Publish the trained checkpoint
-(`best_model_v1_3of5.pth`, ~8 MB, ~1.98 M params) to Hugging Face under an open license
-(recommended: **Apache-2.0** or **MIT**).
+We developed the **DualBranchEncoder** as our solution and **published** the trained
+checkpoint (~24 MB, ~1.98 M params) to Hugging Face under the **Apache-2.0** license.
 
-- 🔗 **Hugging Face model:** _<add link after upload, e.g. https://huggingface.co/<user>/dualbranch-quic-encoder>_
+- 🔗 **Hugging Face model:** https://huggingface.co/dhruvsinghal1387/dualbranch-quic-encoder
 
-How to publish (run locally where the checkpoint is):
-```bash
-pip install huggingface_hub
-huggingface-cli login
-python - <<'PY'
-from huggingface_hub import HfApi, create_repo
-repo = "<user>/dualbranch-quic-encoder"
-create_repo(repo, repo_type="model", exist_ok=True)
-HfApi().upload_file(
-    path_or_fileobj="best_model_v1_3of5.pth",
-    path_in_repo="best_model.pth",
-    repo_id=repo, repo_type="model",
-)
-print("uploaded to", repo)
-PY
+Published files: `best_model.pth` (encoder, epoch 28, val acc 0.927), `prototypes.pth`
+(class-prototype gallery for nearest-prototype classification), and a model card (`README.md`)
+covering architecture, the `(30,3)` + `16`-feature input contract, the 5-tuple-purge
+rationale, KPI results, and a usage snippet.
+
+Load it in a few lines:
+```python
+import torch
+from huggingface_hub import hf_hub_download
+from src.models_dual_branch import DualBranchEncoder
+
+repo = "dhruvsinghal1387/dualbranch-quic-encoder"
+model = DualBranchEncoder(seq_input_dim=3, stat_input_dim=16, d_model=256, embed_dim=256)
+ckpt = torch.load(hf_hub_download(repo, "best_model.pth"), map_location="cpu", weights_only=False)
+model.load_state_dict(ckpt["model_state_dict"])
+model.eval()
 ```
-Include a model card stating: architecture (DualBranchEncoder, 256-d L2-normalized
-embedding), training data (CESNET-QUIC22 XS), intended use (encrypted traffic
-classification), KPIs (see [../KPI_RESULTS.md](../KPI_RESULTS.md)), and license.
+
+How it was published (run locally where the checkpoint lives):
+```python
+from huggingface_hub import HfApi, create_repo
+repo = "dhruvsinghal1387/dualbranch-quic-encoder"
+create_repo(repo, repo_type="model", exist_ok=True)
+api = HfApi()
+for f in ("best_model.pth", "prototypes.pth"):
+    api.upload_file(path_or_fileobj=f"model/{f}", path_in_repo=f, repo_id=repo, repo_type="model")
+```
 
 ## Datasets Used
 
